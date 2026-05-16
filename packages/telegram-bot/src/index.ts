@@ -1,0 +1,5 @@
+export { bootTelegramBot } from './bootTelegramBot.ts'
+export { renderDashboard, renderThreadTopic, renderTask } from './renderer.ts'
+export { dispatchIncoming } from './commands.ts'
+export { createTopic, closeTopic, editTopicTitle } from './topics.ts'
+export type { TelegramBotOpts, TelegramBot, ManagedTopic, IncomingAction } from './telegramBot.abstract.ts'

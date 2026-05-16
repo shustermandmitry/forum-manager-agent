@@ -1,0 +1,20 @@
+{
+  "name": "@forum-manager-agent/llm-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LLM subprocess bridges: Claude Code (per-call headless) + local Qwen via mlx-lm socket. Single LLMClient interface, two implementations.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "echo 'Not implemented'",
+    "test": "echo 'Not implemented'",
+    "type-check": "tsc --noEmit"
+  }
+}

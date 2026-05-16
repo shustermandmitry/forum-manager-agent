@@ -1,0 +1,21 @@
+{
+  "name": "@forum-manager-agent/agent-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Always-on server: hosts treenity instance + forumAgent ProcessDef + websocket endpoint. The brain of one peer's installation.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "echo 'Not implemented'",
+    "dev": "echo 'Not implemented'",
+    "test": "echo 'Not implemented'",
+    "type-check": "tsc --noEmit"
+  }
+}

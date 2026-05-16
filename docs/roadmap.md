@@ -15,8 +15,8 @@ Last updated: 2026-05-16
 - [x] Design doc written (`docs/design.md`)
 - [x] Roadmap written (this file)
 - [x] Memory entry created (`design_forum_manager_agent_2026-05-16.md`) + indexed in MEMORY.md
-- [ ] `git init` (deferred — ask before initializing)
-- [ ] Skeleton: per-package `module.md` + `.abstract.ts` stubs (next step, awaits approval)
+- [x] `git init` + remote wired to https://github.com/shustermandmitry/forum-manager-agent
+- [x] Skeleton: per-package `module.md` + `.abstract.ts` + stub `.ts` files for all 6 Phase 1 packages
 
 ---
 

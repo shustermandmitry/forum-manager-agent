@@ -1,0 +1,20 @@
+{
+  "name": "@forum-manager-agent/telegram-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram bot binding for the agent. Per-peer (each peer brings their own bot). Renders tree state to topic messages; turns reactions/replies into mutations.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "echo 'Not implemented'",
+    "test": "echo 'Not implemented'",
+    "type-check": "tsc --noEmit"
+  }
+}

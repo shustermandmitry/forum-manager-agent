@@ -1,0 +1,20 @@
+{
+  "name": "@forum-manager-agent/forum-plugins-reddit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reddit scraper plugin — declarative kind (json-api). Bootstrap output of scraper-generator; first forum supported in Phase 1.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "echo 'Not implemented'",
+    "test": "echo 'Not implemented'",
+    "type-check": "tsc --noEmit"
+  }
+}

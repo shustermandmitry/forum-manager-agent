@@ -1,0 +1,19 @@
+{
+  "name": "@forum-manager-agent/dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Webview dashboard. Solid + Vite client. Connects to agent-server via websocket. Same shape as sam-tool's client.",
+  "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "echo 'Not implemented'",
+    "dev": "echo 'Not implemented'",
+    "test": "echo 'Not implemented'",
+    "type-check": "tsc --noEmit"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@forum-manager-agent/scraper-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Claude-driven generator that emits new forum-plugins/<forum>/ packages from a forum URL. Inspects, fills declarative schema (or writes code-mode), scaffolds package + fixtures + tests.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "forum-plugins-gen": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "echo 'Not implemented'",
+    "test": "echo 'Not implemented'",
+    "type-check": "tsc --noEmit"
+  }
+}
