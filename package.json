@@ -15,6 +15,9 @@
     "zod": "^3.23.0"
   },
   "pnpm": {
+    "overrides": {
+      "zod": "^3.23.0"
+    },
     "peerDependencyRules": {
       "ignoreMissing": [
         "@shustermandmitry/samovar",
