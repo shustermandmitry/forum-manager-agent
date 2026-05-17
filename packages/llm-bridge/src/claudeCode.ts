@@ -21,6 +21,7 @@ import {
   type ChatArgs,
   type ChatResult,
 } from './types.ts'
+import { parseRankOutput } from './parseRank.ts'
 
 interface ResolvedOpts {
   binary: string
@@ -122,26 +123,8 @@ User: ${args.message}
 Respond as the assistant. No preamble.`
 }
 
-function parseRankOutput(raw: string): RankResult {
-  // Tolerate a leading code fence or surrounding whitespace.
-  const cleaned = raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '').trim()
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(cleaned)
-  } catch {
-    throw new Error(`Failed to parse rank output as JSON: ${raw}`)
-  }
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    typeof (parsed as Record<string, unknown>).score !== 'number' ||
-    typeof (parsed as Record<string, unknown>).rationale !== 'string'
-  ) {
-    throw new Error(`Rank output has invalid shape: ${raw}`)
-  }
-  const obj = parsed as { score: number; rationale: string }
-  return { score: obj.score, rationale: obj.rationale }
-}
+// parseRankOutput is shared between Claude + local clients (same JSON shape) —
+// extracted to ./parseRank.ts.
 
 /**
  * Create a Claude Code-backed LLMClient. Each call spawns `claude --print`

@@ -53,8 +53,8 @@ createLLMRouter(opts: { claude, local, config }): LLMClient
 | Package | Used for |
 |---|---|
 | `execa` | Spawn `claude` subprocess with structured stdio |
-| `node:net` | Unix socket client for mlx-lm |
-| `zod` | Schema validation of model JSON outputs |
+| (native `fetch`) | HTTP client for mlx_lm.server's OpenAI-compatible endpoint |
+| `zod` | Schema validation of model JSON outputs (planned, not yet wired) |
 
 ## Subprocess wrangling
 
@@ -64,10 +64,11 @@ createLLMRouter(opts: { claude, local, config }): LLMClient
 - MCP servers can be attached via `--mcp-config` flag for tool-use mode (Phase 3+).
 
 **Local model (mlx-lm):**
-- Long-running `mlx_lm.server` started once at agent-server boot.
-- Listens on configured unix socket (per `/config/models/local/socketPath`).
-- Model + LoRA loaded once at server start. ~30s load time. Fine because server is always-on.
-- Reconnect logic in this package handles socket drops.
+- Long-running `mlx_lm.server` started independently (you run it; agent-server doesn't manage its lifecycle).
+- Exposes an OpenAI-API-compatible HTTP endpoint (`/v1/chat/completions`).
+- llm-bridge POSTs to it per call. Uses `fetch` + `AbortSignal.timeout()` for timeouts.
+- `baseUrl` config supports localhost (single-machine) or LAN IP (split-host: agent on M1 Air, model on M1 Pro).
+- Model + LoRA loaded once at server start (~30s for Qwen 14B q4). Server reuse across many requests.
 
 ## Structure
 
@@ -79,8 +80,9 @@ llm-bridge/
 └─ src/
    ├─ index.ts                ← barrel
    ├─ types.ts                ← LLMClient interface + ProcessDef store/opts types
+   ├─ parseRank.ts            ← shared rank-output parser
    ├─ claudeCode.ts           ← Claude Code subprocess driver (library)
-   ├─ localModel.ts           ← mlx-lm socket client (library)
+   ├─ localModel.ts           ← mlx_lm.server HTTP client (library)
    ├─ router.ts               ← per-call routing (library)
    └─ llmBridgeProcess.ts     ← ProcessDef wrapper (mounted by agent-server)
 ```

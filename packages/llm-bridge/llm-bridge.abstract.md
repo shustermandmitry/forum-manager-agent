@@ -16,7 +16,7 @@ Used together: Claude provides substance, local shapes it into your voice. You e
 ## What it does
 
 - Spawns `claude --print` as a subprocess per call. Uses your Max session (no API key, no per-token bill).
-- Maintains a long-running socket connection to `mlx_lm.server` running your local model. Reconnects if dropped.
+- POSTs OpenAI-compatible chat-completions requests to `mlx_lm.server`'s HTTP endpoint. Server can run on the same machine or on another machine on the LAN (split-host setup).
 - Routes each call to the right model based on a routing config (rank to local, draft to both, voice to local, chat to Claude — typical defaults).
 - Surfaces rate-limit and subprocess errors as typed exceptions the agent can react to.
 

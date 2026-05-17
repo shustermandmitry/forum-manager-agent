@@ -76,10 +76,25 @@ export interface ClaudeCodeOpts {
 }
 
 export interface LocalModelOpts {
-  socketPath: string
+  /**
+   * Base URL of mlx_lm.server (or another OpenAI-API-compatible endpoint).
+   * E.g., 'http://localhost:8888' for local, 'http://192.168.1.42:8888' for
+   * split-host setup with the model on another machine on the LAN.
+   */
+  baseUrl: string
+  /** Model id passed in each request — must match what mlx_lm.server loaded. */
   modelName: string
+  /**
+   * LoRA path applied at mlx_lm.server startup time, not per-request.
+   * Carried in config for documentation only; not used by the HTTP client.
+   */
   loraPath?: string
+  /** Max output tokens per response. Default 1024. */
   maxTokens?: number
+  /** Max wall-clock per request in ms. Default 5 minutes. */
+  timeoutMs?: number
+  /** Sampling temperature. Default 0.7. */
+  temperature?: number
 }
 
 export interface RouterConfig {
