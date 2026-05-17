@@ -21,6 +21,26 @@ Last updated: 2026-05-16
 - [x] User-doc site structure (`docs/index.md` + 7 user guides in `docs/user/`) — describes functionality + workflows before implementation per repo CLAUDE.md doc-first rule
 - [x] Samovar-side feature requests recorded in memory: typed dynamic children + config-mount-handler
 
+## Phase 0.5 — Build pipeline wiring (2026-05-16 evening)
+
+Status: PARTIAL. Library code filled across 4 packages. Type-check working for 2/6 packages. Blocked on samovar's own createProcess.ts TS errors (see memory `samovar_createProcess_ts_errors_2026-05-16.md`).
+
+Done:
+- [x] **Pass 3 library code**: llm-bridge (claudeCode, localModel, router, parseRank), reddit HTTP primitives (fetchSubreddit, fetchThreadComments, rate-limit gate), agent-server pluginRegistry, scraper-generator (inspectForum + scaffold + generateForumPlugin + cli), dashboard schemaRegistry
+- [x] **pnpm overrides + workspace links** to spicetime-architecture/packages/{samovar, samovar-cli, samovar-test, samovar-utils}
+- [x] **`pnpm install`** succeeds (135 packages resolved)
+- [x] **tsconfig.base.json + 6 per-package tsconfigs** added
+- [x] **Per-package exports → `src/*.ts`** (so type-check works without a build step)
+- [x] **`pnpm exec samovar-cli`** runs (after `tsx` installed as dep)
+
+Blocked / TODO:
+- [ ] **Fix samovar's createProcess.ts TS errors** (samovar-side work — not this repo). Currently blocks type-check for agent-server, llm-bridge, forum-plugins/reddit, scraper-generator.
+- [ ] **Per-package `samovar.config.ts` files** — each declares its target (`browser-wasm` for dashboard, `node-napi` for everything else, with `isTs: true` to skip Rust). NOT yet written; need to verify exact shape from samovar-cli source first (no extrapolating per `feedback_samovar_shapes_from_source_only.md` in memory).
+- [ ] **Update design.md §3** to reflect correct target names (`browser-wasm` / `node-napi` + `isTs` flag) — currently mentions `node-napi` / `node-ts` / `browser` which is incorrect.
+- [ ] **`samovar-cli build`** — runs but errors on empty workspace-root config; needs per-package configs first.
+- [ ] **`samovar-cli test`** — to try once configs are in.
+- [ ] **Fill remaining stubs** that need samovar runtime: forumManager workers, llmBridgeProcess body, redditForum workers, bootAgentServer body, dashboard's Solid components (formRenderer/treeNavigator/app/treeClient), telegram-bot bodies.
+
 ---
 
 ## Phase 1 — Solo curator (one peer, one forum, both models)
