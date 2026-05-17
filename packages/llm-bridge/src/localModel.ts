@@ -18,7 +18,7 @@ import type {
   VoiceResult,
   ChatArgs,
   ChatResult,
-} from './llmBridge.abstract.ts'
+} from './types.ts'
 
 /**
  * @abstract Create a local-LLM-backed LLMClient (mlx-lm via unix socket).

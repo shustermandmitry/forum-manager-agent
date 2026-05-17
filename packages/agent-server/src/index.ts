@@ -6,17 +6,23 @@ export type {
   ThreadId,
   PeerId,
   ForumHandle,
+  SessionId,
+  TaskId,
+  Topic,
   ReviewMode,
   ThreadStatus,
   DisclosurePolicy,
-} from './types.ts'
-export type {
   AgentConfig,
   ForumConfig,
   QueueEntry,
   InboxEntry,
+  SeenEntry,
   TrainingEntry,
   PersonCard,
+  PermissionRules,
+  PermissionRule,
   Task,
+  ChatSession,
+  ChatMessage,
   AgentStatus,
-} from './forumAgent.abstract.ts'
+} from './types.ts'

@@ -7,7 +7,7 @@
  * @moduleType utility
  */
 
-import type { InspectionReport } from './generator.abstract.ts'
+import type { InspectionReport } from './types.ts'
 
 /**
  * @abstract Probe a forum and capture enough signal to generate a scraper.

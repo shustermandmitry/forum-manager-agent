@@ -14,5 +14,5 @@ export type {
   VoiceResult,
   ChatArgs,
   ChatResult,
-} from './llmBridge.abstract.ts'
-export { RateLimitError, SubprocessError, SocketDisconnectedError } from './llmBridge.abstract.ts'
+} from './types.ts'
+export { RateLimitError, SubprocessError, SocketDisconnectedError } from './types.ts'

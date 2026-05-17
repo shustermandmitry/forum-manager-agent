@@ -6,7 +6,7 @@
  * @moduleType utility
  */
 
-import type { DashboardOpts, DashboardClient } from './dashboard.abstract.ts'
+import type { DashboardOpts, DashboardClient } from './types.ts'
 
 /**
  * @abstract Create a connected tree client.

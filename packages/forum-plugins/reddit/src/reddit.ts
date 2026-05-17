@@ -11,7 +11,7 @@ import type {
   RedditScraperOpts,
   RedditQueueEntry,
   ThreadDetail,
-} from './reddit.abstract.ts'
+} from './types.ts'
 
 /**
  * @abstract Create a Reddit forum scraper instance.

@@ -15,7 +15,7 @@ import type {
   PersonCard,
   Task,
   AgentStatus,
-} from './forumAgent.abstract.ts'
+} from './types.ts'
 
 const NOT_IMPL = 'Not implemented'
 

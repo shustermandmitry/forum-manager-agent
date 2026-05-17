@@ -6,7 +6,7 @@
  * @moduleType utility
  */
 
-import type { GenerateOpts, GeneratedPlugin } from './generator.abstract.ts'
+import type { GenerateOpts, GeneratedPlugin } from './types.ts'
 
 /**
  * @abstract Generate a new forum scraper plugin package.

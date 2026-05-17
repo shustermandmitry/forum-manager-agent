@@ -6,7 +6,7 @@
  * @moduleType utility
  */
 
-import type { GeneratedPlugin } from './generator.abstract.ts'
+import type { GeneratedPlugin } from './types.ts'
 
 /**
  * @abstract Scaffold a forum-plugin package onto disk.

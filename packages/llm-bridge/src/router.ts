@@ -18,7 +18,7 @@ import type {
   VoiceResult,
   ChatArgs,
   ChatResult,
-} from './llmBridge.abstract.ts'
+} from './types.ts'
 
 /**
  * @abstract Create a routing LLMClient that dispatches calls to Claude

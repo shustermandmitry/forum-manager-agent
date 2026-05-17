@@ -6,7 +6,7 @@
  * @moduleType utility
  */
 
-import type { TelegramBotOpts, TelegramBot } from './telegramBot.abstract.ts'
+import type { TelegramBotOpts, TelegramBot } from './types.ts'
 
 /**
  * @abstract Boot the Telegram binding.

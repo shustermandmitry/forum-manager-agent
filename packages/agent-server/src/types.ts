@@ -1,38 +1,18 @@
 /**
  * @module agent-server/types
  *
- * @abstract Public types for the agent-server package.
- *
- * @moduleType type
- *
- * @api
+ * Public types for the agent-server package.
  */
 
-/**
- * Identifier for a forum thread. Format depends on the forum scraper that
- * produced it; treated as opaque by everything except its originating plugin.
- */
 export type ThreadId = string
-
-/**
- * Telegram user id of a peer. Canonical identity within the team.
- */
 export type PeerId = string
-
-/**
- * Forum handle of a person (forum user or a peer's forum identity).
- * Format depends on the originating forum.
- */
 export type ForumHandle = string
+export type SessionId = string
+export type TaskId = string
+export type Topic = string
 
-/**
- * Review modes for an inbox row. See design.md §10 for state machine.
- */
 export type ReviewMode = 'solo' | 'peer-review' | 'gated'
 
-/**
- * Per-thread workflow state. See design.md §10.
- */
 export type ThreadStatus =
   | 'scraped'
   | 'drafting'
@@ -43,35 +23,144 @@ export type ThreadStatus =
   | 'archived'
   | 'abandoned'
 
-/**
- * Disclosure policy choice. Locked default: 'no-human-edit'.
- */
 export type DisclosurePolicy = 'strict' | 'no-human-edit' | 'never'
 
-/**
- * Boot options for the agent server.
- *
- * @api
- */
 export interface BootOptions {
-  /** Path to per-peer config.local.toml. */
   configPath: string
-  /** Websocket port for dashboard + cross-process clients. Default 7710. */
   port?: number
-  /** Tree mount path for the forumAgent ProcessDef. Default '/forum-agent'. */
   mountPath?: string
 }
 
-/**
- * Handle to a running agent server. Returned by bootAgentServer.
- *
- * @api
- */
 export interface AgentServer {
-  /** Websocket port the server is listening on. */
   readonly port: number
-  /** Tree path the forumAgent is mounted at. */
   readonly mountPath: string
-  /** Graceful shutdown — closes sockets, syncs sqlite, releases subprocesses. */
   stop(): Promise<void>
+}
+
+// ─── Forum agent store types ──────────────────────────────────────────────
+
+export interface AgentConfig {
+  focus: {
+    prompt: string
+    redLines: string[]
+    voiceSamples: string[]
+  }
+  forums: ForumConfig[]
+  models: {
+    claude: { auth_ref: string }
+    local: { modelName: string; loraPath?: string; socketPath: string }
+  }
+  policy: {
+    disclosure: DisclosurePolicy
+    disclosure_footer: string
+    escalation_trigger: string
+    autopost_classes: string[]
+  }
+  telegram: {
+    token_ref: string
+    supergroupId?: string
+  }
+  retraining: {
+    cadence: 'daily' | 'weekly' | 'monthly'
+    minNewRows: number
+  }
+}
+
+export interface ForumConfig {
+  forumId: string
+  pluginName: string
+  enabled: boolean
+  pollIntervalMinutes: number
+}
+
+export interface QueueEntry {
+  threadId: ThreadId
+  forumId: string
+  scrapedAt: number
+  context: string
+  url: string
+}
+
+export interface InboxEntry {
+  threadId: ThreadId
+  context: string
+  claudeDraft?: string
+  localDraft?: string
+  userChoice?: 'claude' | 'local' | 'scratch'
+  userFinal?: string
+  status: ThreadStatus
+  reviewMode: ReviewMode
+  reviewPeers?: PeerId[]
+  gatePeers?: PeerId[]
+  peerApprovals?: PeerId[]
+  peerComments?: { peerId: PeerId; text: string; at: number }[]
+}
+
+export interface SeenEntry {
+  threadId: ThreadId
+  firstSeenAt: number
+  lastTouchedAt: number
+}
+
+export interface TrainingEntry {
+  threadId: ThreadId
+  context: string
+  claudeRaw: string
+  localVoiced: string
+  userFinal: string
+  userChoice: 'claude' | 'local' | 'scratch'
+  editDistance: number
+  commentary?: string
+  threadClass?: string
+  at: number
+}
+
+export interface PersonCard {
+  handle: ForumHandle
+  notes: string
+  threads: ThreadId[]
+  expertiseTags: string[]
+  engagementHistory: { threadId: ThreadId; outcome: string; at: number }[]
+}
+
+export interface PermissionRules {
+  rules: PermissionRule[]
+  peers: Record<PeerId, { role: 'guest' | 'viewer' | 'peer' | 'author' }>
+}
+
+export interface PermissionRule {
+  selector: string
+  role: string
+  grant: ('read' | 'comment' | 'edit' | 'approve')[]
+}
+
+export interface Task {
+  id: TaskId
+  type: 'curate-draft' | 'peer-review' | 'gate-approve' | 'handle-escalation' | 'retrain-prompt'
+  assignee: PeerId
+  threadId?: ThreadId
+  status: 'open' | 'in-progress' | 'completed' | 'blocked'
+  createdAt: number
+  dueAt?: number
+  blockedBy?: TaskId[]
+}
+
+export interface ChatSession {
+  sessionId: SessionId
+  messages: ChatMessage[]
+  startedAt: number
+}
+
+export interface ChatMessage {
+  role: 'user' | 'agent'
+  text: string
+  at: number
+}
+
+export interface AgentStatus {
+  mode: 'running' | 'paused' | 'starting' | 'stopping'
+  scrapersHealthy: boolean
+  llmsReady: boolean
+  telegramConnected: boolean
+  lastError?: { at: number; message: string }
 }

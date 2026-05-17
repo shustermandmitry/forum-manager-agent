@@ -19,7 +19,7 @@ import type {
   VoiceResult,
   ChatArgs,
   ChatResult,
-} from './llmBridge.abstract.ts'
+} from './types.ts'
 
 /**
  * @abstract Create a Claude Code-backed LLMClient.

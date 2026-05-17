@@ -6,7 +6,7 @@
  * @moduleType utility
  */
 
-import type { IncomingAction } from './telegramBot.abstract.ts'
+import type { IncomingAction } from './types.ts'
 
 /**
  * @abstract Dispatch an incoming action to the appropriate agent mutation.

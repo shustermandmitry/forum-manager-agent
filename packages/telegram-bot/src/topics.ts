@@ -6,7 +6,7 @@
  * @moduleType utility
  */
 
-import type { ManagedTopic } from './telegramBot.abstract.ts'
+import type { ManagedTopic } from './types.ts'
 
 /**
  * @abstract Create a new topic in the supergroup.

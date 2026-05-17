@@ -5,4 +5,4 @@ export type {
   RedditQueueEntry,
   ThreadDetail,
   ForumScraperPlugin,
-} from './reddit.abstract.ts'
+} from './types.ts'
