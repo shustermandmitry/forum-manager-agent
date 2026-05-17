@@ -115,7 +115,7 @@ function printResult(result: import('./types.ts').GeneratedPlugin): void {
  * - Exits 1 on parse failure, generation failure, or smoke-test failure.
  */
 export async function runCli(argv: string[] = process.argv.slice(2)): Promise<void> {
-  let parsed: ParsedArgs
+  let parsed!: ParsedArgs
   try {
     parsed = parseArgs(argv)
   } catch (err) {
