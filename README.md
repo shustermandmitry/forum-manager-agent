@@ -18,8 +18,9 @@ Designed to help non-experts engage substantively in technical forum threads (en
 
 ## See
 
-- **[SPEC.md](SPEC.md) — start here if you're considering joining the team.** Describes functionalities and workflows; light on implementation.
-- [docs/design.md](docs/design.md) — full engineering architecture
+- **[docs/index.md](docs/index.md) — user-doc index. START HERE if you're using or considering forum-manager-agent.** 7 user-facing guides + per-package overviews.
+- [SPEC.md](SPEC.md) — team-review-facing functionality + workflow spec
+- [docs/design.md](docs/design.md) — engineering architecture
 - [docs/roadmap.md](docs/roadmap.md) — phased build plan
 - [LICENSE](LICENSE) — MIT
 

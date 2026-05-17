@@ -16,7 +16,10 @@ Last updated: 2026-05-16
 - [x] Roadmap written (this file)
 - [x] Memory entry created (`design_forum_manager_agent_2026-05-16.md`) + indexed in MEMORY.md
 - [x] `git init` + remote wired to https://github.com/shustermandmitry/forum-manager-agent
-- [x] Skeleton: per-package `module.md` + `.abstract.ts` + stub `.ts` files for all 6 Phase 1 packages
+- [x] Skeleton: per-package `module.md` + stub `.ts` files for all 6 Phase 1 packages
+- [x] **2026-05-16 evening re-lock** — `.abstract.ts` pattern dropped (was prose-in-TS pollution); per-module `<name>.abstract.md` user-facing overview added instead; types collapsed to `types.ts`; per-process architecture replaces monolithic forumAgent; plugin factory pattern + registry; dashboard absorbs typed-tree-view (composite zod schema); `app.config.ts` separate from `samovar.config.ts`; CLAUDE.md at repo root for project-local conventions
+- [x] User-doc site structure (`docs/index.md` + 7 user guides in `docs/user/`) — describes functionality + workflows before implementation per repo CLAUDE.md doc-first rule
+- [x] Samovar-side feature requests recorded in memory: typed dynamic children + config-mount-handler
 
 ---
 

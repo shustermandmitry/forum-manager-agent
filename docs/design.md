@@ -1,640 +1,625 @@
-# forum-manager-agent — Design
+# forum-manager-agent — Engineering Design
 
-**Status**: Locked 2026-05-16. Source of truth for the agent's architecture.
+**Status**: Locked 2026-05-16 (evening revision). Source of truth for architecture and engineering decisions.
 
-**Prior context recovered from chat history** (`~/.claude/projects/.../a642bb5e-...jsonl` May 5 lines 100–141, `aa31212e-...jsonl` May 11 lines 223–226) — that design was never persisted to memory, hence this repo.
+**Audience**: engineers building or extending this. For user-facing docs see [index.md](index.md). For team-review functionality + workflow spec see [../SPEC.md](../SPEC.md).
+
+**Major revision history:**
+- 2026-05-16 morning: initial design (monolithic forumAgent ProcessDef, .abstract.ts pattern, app section in samovar.config)
+- 2026-05-16 evening: **this version.** Per-process architecture, plugins as ProcessDef factories, dashboard = typed tree view, app.config.ts separate from samovar.config.ts, .abstract.ts dropped in favor of .abstract.md user docs
 
 ---
 
 ## 1. What this is
 
-A samovar/treenity app that helps a non-expert engage substantively on technical forums (endless-sphere, /r/ebikes, BAFANG, OSF Discord, etc.) without sounding AI-generated, without faking expertise, and without revealing AI involvement on uncurated posts.
+A samovar/treenity app where each user runs their own instance — own agent, own local LLM, own Claude account, own DB. Helps non-expert users engage substantively on technical forums by combining Claude Code (technical substance) with a local Qwen 2.5 32B + LoRA trained on the user's edits (authentic voice). Human curates every message. Inter-peer collaboration via Telegram supergroups, not a shared server.
 
-It is **not** a forum-posting bot. It is a **curation system** where the human stays in the loop on every message until specific narrow classes earn enough trust to auto-post.
-
-The first use case is grassroots community engagement around the Smart E-Bike project. The design is general — any team can run an instance for any focus (product promotion, problem-solving, expertise-building, community membership).
+First use case: grassroots community engagement for Smart E-Bike. The design is general.
 
 ---
 
 ## 2. Core principles
 
-1. **Peer sovereignty** — each user runs their own instance: own agent process, own local LLM, own Claude account, own DB. No central server. No shared admin. Each peer is admin on their own node.
-2. **Agent-as-proxy** — every interaction (forum reader, forum reply, peer reviewer, peer comment, team member) is mediated by the human's agent. Other peers never reach into your node; they reach into your bot, which checks permissions and decides what to surface.
-3. **Telegram is the fabric** — inter-peer collaboration happens entirely through Telegram supergroups + bots. No tree-to-tree sync in v1 (Hyperswarm `t.mount.remote` is future).
-4. **Human curation is primary** — for every message, the human reviews two drafts (Claude + local) and edits before posting. Auto-post is unlocked per-class, only after evidence of trust.
-5. **Voice fidelity is non-negotiable** — local LoRA, trained on the user's own edits, makes the output sound like the user. Cannot afford to be discovered using AI for forum communications.
-6. **Disclosure ethic** — when no human edit was made before post, the message carries an AI-generated footer. People always know whether they have the human's real attention.
-7. **Training data is captured from day one** — every (thread, claude_draft, local_draft, user_final, choice) tuple is recorded. Day-1 local model is base-instruct only (no LoRA yet); training data accumulates from real use.
+1. **Peer sovereignty** — no central server. Each peer is admin on their own node.
+2. **Agent-as-proxy** — every interaction (forum reader, forum reply, peer reviewer, peer comment, team member) is mediated by the human's agent. Other peers never reach into your node; they reach into your bot.
+3. **Telegram is the fabric** — inter-peer collaboration happens through Telegram supergroups + bots. No tree-to-tree sync v1-3.
+4. **Human curation is primary** — every message is human-reviewed by default. Auto-post is unlocked per-class only after evidence of trust.
+5. **Voice fidelity is non-negotiable** — local LoRA, trained on user's own edits, makes output sound like the user.
+6. **Disclosure ethic** — uncurated messages carry an AI disclosure footer. People always know whether they have the human's real attention.
+7. **Training data captured from day 1** — every (thread, claude_draft, local_draft, user_final, choice) tuple recorded.
+8. **Per-process architecture** — forumManager is a parent; each forum is its own child process; llm-bridge is a process. Reactive everywhere.
+9. **Plugin factory pattern** — plugins are `<TSchema>(props) => TSchema` factories; schema declares its domain in a registry; UI discovery is generic.
+10. **Dashboard = typed tree view** — composite zod schema of the whole tree; schema-aware add/move/remove menus per node; standard `usePath` treenity client hooks for reads.
+11. **Config = initial tree structure** — `app.config.ts` (separate from build-time `samovar.config.ts`) seeds `/config/` tree branch at boot.
+12. **`.abstract.ts` files DROPPED** — types in `types.ts`; per-module user-facing overview in `<name>.abstract.md`. Reverses parent CLAUDE.md convention; project-local CLAUDE.md captures the override.
 
 ---
 
 ## 3. Architecture
 
-### Two-target samovar app
+### Two targets, per-process structure
 
 ```
 Each peer's machine:
-┌───────────────────────────────────────────────────────────┐
-│  forum-manager-agent (samovar app)                         │
-│                                                            │
-│  ┌─ NODE TARGET (always-on background process) ───────┐  │
-│  │                                                      │  │
-│  │  Treenity tree (sqlite-backed)  ← THE DB            │  │
-│  │  ├─ /forum-agent       (the ProcessDef)             │  │
-│  │  ├─ /queue, /inbox, /seen, /training, /tasks, ...   │  │
-│  │  ├─ /people/<handle>   (forum-participant cards)    │  │
-│  │  ├─ /instructions/claude/<topic>.md                 │  │
-│  │  ├─ /permissions       (per-thread + per-path ACL)  │  │
-│  │  └─ /config            (focus, voice, policy)       │  │
-│  │                                                      │  │
-│  │  Subprocess bridges:                                 │  │
-│  │  ├─ Claude Code (your Max sub, headless)            │  │
-│  │  ├─ Local LLM (mlx-lm server, Qwen 2.5 32B + LoRA)  │  │
-│  │  ├─ Scraper MCP servers (per forum)                 │  │
-│  │  └─ Telegram bot (your bot, your token)             │  │
-│  │                                                      │  │
-│  │  Websocket endpoint (for the dashboard client)       │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                            │
-│  ┌─ CLIENT TARGET ──────────────────────────────────────┐  │
-│  │  Webview dashboard (Solid + Vite)                    │  │
-│  │  ├─ subscribes to local node tree over websocket     │  │
-│  │  ├─ same shape as sam-tool's client                  │  │
-│  │  └─ runs in browser (or wrapped in Tauri/Electron)   │  │
-│  └──────────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ forum-manager-agent — one samovar app, two build targets        │
+│                                                                 │
+│ ┌─── NODE TARGET ────────────────────────────────────────────┐ │
+│ │ Always-on background process. Built with BOTH node-napi    │ │
+│ │ AND plain node-ts bindings (binding stress test).          │ │
+│ │                                                            │ │
+│ │ Treenity instance — the tree, sqlite-backed                │ │
+│ │ │                                                          │ │
+│ │ ├─ /config/         seeded from app.config.ts at boot      │ │
+│ │ ├─ /forum-agent/    parent forumManager ProcessDef         │ │
+│ │ │  ├─ /forum-agent/forums/                                 │ │
+│ │ │  │  ├─ /reddit/   redditForum ProcessDef (instance)      │ │
+│ │ │  │  ├─ /endless-sphere/  endlessSphereForum (instance)   │ │
+│ │ │  │  └─ ...        one process per configured forum       │ │
+│ │ │  ├─ /llm-bridge/  llmBridge ProcessDef                   │ │
+│ │ │  ├─ /inbox/       drafts awaiting curation               │ │
+│ │ │  ├─ /training/    LoRA training data                     │ │
+│ │ │  ├─ /people/      person cards                           │ │
+│ │ │  └─ /tasks/       work items                             │ │
+│ │ │                                                          │ │
+│ │ └─ websocket endpoint                                      │ │
+│ │                                                            │ │
+│ │ In-process bindings (not separate processes):              │ │
+│ │   - Telegram bot (grammY)                                  │ │
+│ │   - Subprocess drivers (Claude Code spawner, mlx socket)   │ │
+│ └────────────────────────────────────────────────────────────┘ │
+│                                                                 │
+│ ┌─── CLIENT TARGET ────────────────────────────────────────┐   │
+│ │ Webview dashboard (Solid + Vite)                          │   │
+│ │  - Connects to node target via standard treenity-client   │   │
+│ │    websocket + usePath hooks                              │   │
+│ │  - Typed tree view (schema-aware add/move/remove)         │   │
+│ └───────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
                               │
-                              │ (Telegram is the ONLY inter-peer fabric)
+                              │ (peers connect via Telegram only)
                               ▼
-                ┌──────────────────────────────┐
-                │  Shared Telegram supergroup  │
-                │  ├─ @your_bot                │
-                │  ├─ @alice_bot               │
-                │  ├─ @bob_bot                 │
-                │  ├─ topic: thread #12345     │
-                │  ├─ topic: review queue      │
-                │  └─ topic: task board        │
-                └──────────────────────────────┘
+                ┌──────────────────────────────────────┐
+                │  Shared Telegram forum-mode supergroup│
+                │  ├─ @your_bot, @alice_bot, @bob_bot   │
+                │  ├─ topic: thread #12345              │
+                │  ├─ topic: review queue               │
+                │  └─ topic: task board                 │
+                └───────────────────────────────────────┘
 ```
 
-### Samovar target bindings
+### Why per-process
 
-- **node target** — built with both `node-napi` and plain `node-ts` bindings, to stress-test both. Rust isn't core to this app, but exercising napi keeps the pipeline honest.
-- **client target** — `browser` (production) + `browser-jsdom` (tests).
+The earlier (morning) design had one monolithic `forumAgent` ProcessDef owning everything (queue, inbox, scrapers, LLM dispatch). Evening revision splits this:
 
-### Subprocess bridges (sockets)
+- **`forumManager` parent** — coordinator. Children: one per active forum, plus llm-bridge.
+- **One process per forum** (e.g., `redditForum`, `endlessSphereForum`) — owns its own polling, its own queue slice. Reactive subscribers downstream see new entries.
+- **`llmBridge` process** — owns Claude subprocess driver + mlx-lm socket. Exposes hook-style reactive query funcs.
 
-External processes connect via **unix sockets** (clean, local-only, no port-binding):
+Reasons:
+- Each forum has its own lifecycle (pollIntervalMinutes, auth state, rate limits). Isolating into a process per forum localizes failure (one forum API hiccup doesn't kill all others).
+- Adding/removing forums = adding/removing children. Aligns with the (future) typed-dynamic-children API.
+- Reactive subscriptions across processes are samovar's native model; trying to drive everything inside one process means worker logic gets stringy and hard to test.
 
-- **Claude Code**: spawned per-call via `claude --print` in headless mode, stdio captured. Uses Max sub auth.
-- **Local LLM**: long-running `mlx_lm.server` on a unix socket (or local TCP). Model loads once (~30s for Qwen 32B), serves many requests. Slow inference (~5–15 tok/s on M1 32GB quantized) is fine — drafts are not real-time.
-- **Forum scrapers**: each forum is its own MCP server in `packages/forum-plugins/<forum>/`. The agent spawns them as needed.
+### Build target stress test
+
+Two node targets exist for the same code, to exercise samovar's binding system:
+- `node-napi` — native-NAPI binding (no actual Rust crate in this app; binding mechanism is what's being tested)
+- `node-ts` — plain TypeScript binding (no codegen)
+
+Both should produce identically-behaving builds. CI runs both; behavioral parity tests prove they agree.
+
+The `browser` target is for the dashboard.
+
+### Subprocess bridges (unix sockets)
+
+External processes connect via unix sockets:
+
+- **Claude Code**: spawned per-call via `claude --print`. Cold start ~300ms. Auth via Max session on disk (no API key in process).
+- **Local LLM** (mlx-lm): long-running `mlx_lm.server` listening on a configured socket path. Model + LoRA load once at server start (~30s). Reconnect logic in llm-bridge handles socket drops.
 
 ---
 
-## 4. Dual-model drafting pipeline
+## 4. The agent loop (reactive + outside-driven)
 
-**Both models run from day 1.** Claude is good immediately; local is bad initially and improves through LoRA retraining on captured user edits.
-
-### Standard flow (most threads)
+The pipeline per thread:
 
 ```
-scraper → /queue/<id>
-       ↓
-agent picks unranked threads
-       ↓
-   ┌───────────────┐    ┌───────────────┐
-   │  Claude Code  │    │  Local LLM    │
-   │  → claude_draft│    │  → local_draft│
-   └───────────────┘    └───────────────┘
-       ↓                       ↓
-       └───────┬───────────────┘
-               ↓
-       /inbox/<id>/
-         ├─ claude_draft
-         ├─ local_draft
-         └─ status: awaiting-curation
-               ↓
-   Telegram notification + dashboard surface
-               ↓
-   User reviews both side-by-side, picks starting point, edits
-               ↓
-       /inbox/<id>/
-         ├─ user_choice: 'claude' | 'local' | 'scratch'
-         ├─ user_final: <text>
-         └─ status: ready-to-post
-               ↓
-       User posts manually on the forum under their own handle
-               ↓
-       /training/<id>/  ← preference pair + final, gold for LoRA
+[forum process worker]
+  reactively polls forum (poll lives INSIDE worker; output is reactive store updates)
+        │
+        ▼
+  appends new threads to its own /queue store slice
+        │
+        ▼ (reactive subscription)
+[forumManager.draftScheduler]
+  picks unranked threads → dispatches to llm-bridge
+        │
+        ▼ (reactive query funcs over llm-bridge process)
+  - claudeDraft = llm.draft({ ... })       — runs in parallel
+  - localDraft  = llm.draft({ ... })       — both written reactively
+        │
+        ▼ (both ready)
+[/forum-agent/inbox/<threadId>]
+  status: awaiting-curation
+  claudeDraft, localDraft both present
+        │
+        ▼ (Telegram bot + dashboard subscribe; user notified)
+[user reviews via Telegram or dashboard]
+  picks → edits → "ready to post"
+        │
+        ▼
+[user copies, posts manually on forum]
+        │
+        ▼
+[/forum-agent/training/<threadId>]
+  preference pair + final + edit distance recorded
 ```
 
-### Two-stage flow (technical threads — non-expert user)
+### Two-stage pipeline for technical threads
 
-The user wants to engage in threads where they may lack technical depth. The pipeline:
+For threads needing substance the user lacks:
 
 ```
-1. Claude Code generates substantive technical answer (claude_raw)
-   ↑ uses /instructions/claude/<topic>.md to be coached
-2. Local LLM rewrites claude_raw into user's voice (local_voiced)
-3. User reviews local_voiced, makes corrections (user_final)
-4. User optionally records "instructions Claude should have known" → appends to /instructions/claude/<topic>.md
-5. (claude_raw, local_voiced, user_final, edit-distance) → /training/<id>
+Claude generates substantive answer (claude_raw)
+        │
+        ▼
+[llm-bridge.voice() call — local model only]
+  rewrites claude_raw in user's voice using voiceSamples + redLines
+        │
+        ▼
+local_voiced (the actual local draft shown alongside claude_raw)
 ```
 
-The `/instructions/claude/<topic>.md` files are the user's growing **prompt-augmentation library** — equivalent to a personal CLAUDE.md per forum-topic. They get injected into next Claude call's system prompt for matching topics. This is the way to "teach Claude" without API fine-tuning.
+Plus: `/instructions/claude/<topic>.md` accumulates as user-curated prompt-augmentation. Injected into Claude system prompt for matching topics.
 
-### Outside-loop architecture
+### Outside-loop, not inside-Claude
 
-The agent code drives the loop. Each Claude / local-LLM call is a focused, single-task invocation. The LLMs do not orchestrate; they answer one question per call:
+Each LLM call is one focused decision (rank, or draft, or voice, or chat). The agent's code drives the orchestration. Claude does not orchestrate via tool-use loops in v1 (cheaper, more auditable, easier to debug). Inside-loop reserved for specific Phase 3+ tasks where Claude's mid-task adaptability adds value.
 
-- "Rank this thread 1–10 for engagement value"
-- "Draft a reply for this thread, given this context"
-- "Rewrite this Claude answer in this user's voice, using these voice samples"
+### Reactive primitives, not scanning
 
-Outside-loop trades a bit more orchestration code for: cheap calls, auditability, every step a logged line, easy retries.
+Polling lives inside forum-process workers. Everything else subscribes. The agent's draftScheduler subscribes to the union of all forums' /queue slices; when any of them changes, the scheduler reacts. No top-level scan loop.
+
+API calls are wrapped as reactive query-shaped funcs (hook-style, e.g., `useThreadsSince(forum, since)` returns reactive). Consumers subscribe; no awaiting at the top level.
 
 ---
 
-## 5. Data model — the treenity tree
+## 5. Plugin factory pattern + registry
 
-All state lives on one treenity tree. Sqlite is just its serialization. Paths are hierarchical; permissions follow the path tree (see §7).
+Every plugin (forum, llm, future) follows this contract:
 
+```typescript
+interface Plugin<TSchema> {
+  domain: string                      // e.g., 'ForumPlugin', 'LLMPlugin'
+  factory: (props: TPropsForSchema) => TSchema
+  propsSchema: ZodSchema              // for validation in dashboard
+}
 ```
-/forum-agent/
-├─ config/
-│  ├─ focus.md                ← system-prompt template (focus + voice + redLines)
-│  ├─ forums[]                ← which forums are active
-│  ├─ models/
-│  │  ├─ claude               ← config for Claude Code subprocess
-│  │  └─ local                ← model name, LoRA path, quantization
-│  └─ policy/
-│     ├─ disclosure: 'no-human-edit'
-│     ├─ disclosure_footer: <template>
-│     ├─ escalation_trigger: <phrase>
-│     └─ autopost_classes[]   ← thread-classes graduated to auto-post
-│
-├─ queue/<thread_id>          ← scraped, awaiting draft
-├─ inbox/<thread_id>/         ← drafted, awaiting curation
-│  ├─ thread_context
-│  ├─ claude_draft
-│  ├─ local_draft
-│  ├─ user_choice
-│  ├─ user_final
-│  ├─ status                  ← awaiting-curation | gated | ready-to-post | posted | abandoned
-│  ├─ review_mode             ← solo | peer-review | gated
-│  └─ review_peers[]
-│
-├─ seen/<thread_id>           ← dedupe cache
-│
-├─ training/<thread_id>/      ← LoRA training data (preference pairs + final)
-│  ├─ thread_context
-│  ├─ claude_raw
-│  ├─ local_voiced
-│  ├─ user_final
-│  ├─ user_choice
-│  ├─ edit_distance
-│  ├─ commentary              ← optional user note on why edits
-│  ├─ thread_class
-│  └─ timestamp
-│
-├─ people/<forum_handle>/     ← what we know about each forum participant
-│  ├─ notes.md
-│  ├─ threads[]
-│  ├─ expertise_tags[]
-│  └─ engagement_history
-│
-├─ instructions/claude/<topic>.md    ← growing prompt-augmentation library
-│
-├─ permissions/               ← see §7
-│
-├─ tasks/<task_id>/           ← see §11
-│
-└─ chat/                      ← user ↔ agent conversation history
-   └─ <session_id>/messages
-```
+
+### Registry
+
+A `PluginRegistry` (in agent-server) collects plugin metadata at boot. Two ways a plugin lands in the registry:
+
+1. **Static install** — the plugin is listed in `app.config.ts`'s `forums[]` (or future analogous list). agent-server imports the package, registers its plugin.
+2. **Discovery scan** (Phase 2+) — agent-server scans `node_modules` for packages with a `forumManagerAgentPlugin` field in their `package.json`, registers them as available even if not yet instantiated.
+
+Dashboard queries the registry:
+- "What plugins fit slot `/app/forums/*`?" → populates "add a forum" dropdown.
+- "What's the props schema for `@forum-manager-agent/forum-plugins-reddit`?" → generates the per-instance config form.
+
+### Why this matters
+
+The plugin pattern + registry + dashboard's typed-tree-view together mean:
+- Adding a new forum = `pnpm add <plugin>` + open dashboard + click "add forum" + fill form (validated by plugin's own schema) + submit. No code changes.
+- Plugin authors don't need to know anything about the dashboard. They expose a schema; the dashboard auto-renders the form.
+- Scaffolding CLIs (`forum-plugins-gen`) work because the plugin shape is consistent.
+
+### Plugins ARE ProcessDefs
+
+A forum plugin's `factory` returns a `ProcessDef`. When mounted at e.g. `/app/forums/reddit/`, agent-server treats it like any other process: workers run, store is reactive, queries/mutations dispatch through it. The plugin author writes the workers; the framework handles mount lifecycle.
 
 ---
 
-## 6. Telegram integration
+## 6. Forum plugins specifically
 
-### Per-peer bot
+### Plugin contract
 
-Each peer registers their own Telegram bot via @BotFather, sets the token in their local `config.local.toml`. Multiple peers' bots coexist in the same supergroup.
-
-A peer's bot:
-- Listens to its own private chat (1:1 with owner) for commands + curation actions
-- Listens to shared supergroups it's a member of
-- Acts (posts, reacts, edits) **only** on behalf of its owner
-- Enforces its owner's permissions before exposing any data (see §7)
-
-### Supergroup structure (forum-mode with topics)
-
-Use Telegram's forum-mode supergroups (topics, available since 2022) — one supergroup, many topics.
-
-Topic naming convention (auto-managed by bots):
-
-```
-📌 General                    ← live registry + pinned dashboard message
-📋 Task Board                 ← active tasks across all peers
-🔍 Review Queue               ← drafts pending peer review
-💬 r/ebikes #12345           ← per-forum-thread topic, team discussion
-💬 ES #98765                  ← another forum thread
-🤖 Bot Status                 ← health, errors, retraining events
+```typescript
+interface ForumPluginInstance {
+  forumId: string
+  // Reactive query-shaped — subscribers re-evaluate when new threads arrive
+  threadsSince(since: number): ReactiveResource<QueueEntry[]>
+  inspectThread(threadId: ThreadId): Promise<ThreadDetail>
+  // Lifecycle (provided by ProcessDef harness, plugin doesn't implement)
+}
 ```
 
-### Automated group lifecycle
+### Two implementation modes
 
-Topics are created and closed by bots as needed. Triggers:
+**Declarative** (preferred):
+```typescript
+export const config: ForumScraperConfig = {
+  kind: 'json-api',
+  endpoint: 'https://www.reddit.com/r/{subreddit}/new.json',
+  thread_fields: { id: 'id', title: 'title', body: 'selftext', ... },
+  pagination: { type: 'cursor', param: 'after' },
+  rate_limit: { rpm: 10 },
+  // ...
+}
+```
+A generic declarative runtime (in agent-server) interprets this config: builds the URL, fetches, extracts via JSON-paths or CSS selectors, applies rate limiting, returns conforming entries.
 
-- **New active forum thread** marked for peer-review → topic created, relevant peers invited (i.e., bot tags them)
-- **Thread closed** (posted, abandoned) → topic archived (Telegram allows closing topics)
-- **Task assigned** → entry in Task Board topic
-- **Review requested** → entry in Review Queue topic with link to thread topic
+**Code-mode** (escape hatch):
+```typescript
+// For forums that can't fit the declarative schema (Discord, SPAs, ...)
+export const factory: ForumPluginFactory<MyProps> = (props) => ({
+  forumId: 'discord',
+  threadsSince(since) {
+    // custom Discord-gateway code...
+  },
+  // ...
+})
+```
 
-Each topic gets:
-- Pinned summary message (bot rewrites as state changes)
-- Status badge (drafting / awaiting review / ready / posted)
-- Quick-action bot commands (`/approve`, `/edit`, `/comment`, `/escalate`)
+### Generation
 
-### Status bar / dashboard topic
+`scraper-generator` package emits new plugins from a forum URL. Inspects, asks Claude to fill declarative config (or write code-mode for outliers), scaffolds the package on disk. See `packages/scraper-generator/scraper-generator.abstract.md`.
 
-The General topic's pinned message is the live dashboard:
-- Active threads count per forum
-- Pending curations
-- Pending peer reviews
-- Recent posts (last 24h)
-- Each peer's bot health
+### Hybrid (c) strategy
 
-Bot rewrites this message on tree changes.
-
-### Telegram as render-only
-
-Telegram **renders** tree state and **routes user actions back** to the tree. It does not store anything. If the supergroup is deleted, the bot rebuilds all topics from the tree on next run.
+Default: declarative. Escape hatch: code. Both implement the same plugin contract; the agent doesn't distinguish at runtime.
 
 ---
 
-## 7. Permission system
+## 7. LLM bridge (as a process)
 
-### Hierarchical, CSS-like
+`llmBridge` is a ProcessDef mounted at `/forum-agent/llm-bridge/`. Resources:
 
-Permissions are stored at `/permissions/` on each peer's tree. The model is **CSS-like**: selectors target tree paths or entity classes, props are permission verbs. Children inherit parent permissions by default; local overrides win.
+- Claude subprocess driver (spawns `claude --print` per call)
+- mlx-lm socket client (long-running connection)
+
+Public surface: a set of mutations and reactive query funcs:
+
+```typescript
+// Mutations (each spawns a subprocess call or socket request)
+mutations: {
+  rank: (args: RankArgs) => Promise<RankResult>
+  draft: (args: DraftArgs) => Promise<DraftResult>
+  voice: (args: VoiceArgs) => Promise<VoiceResult>   // local only
+  chat: (args: ChatArgs) => Promise<ChatResult>
+}
+
+// Reactive query funcs (hook-style, for consumers wanting subscriptions)
+useClaudeRanking(threadCtx): reactive RankResult
+useLocalDraft(threadCtx): reactive DraftResult
+// ...
+```
+
+Per-call routing is config-driven:
+```typescript
+config.models.routing = {
+  rank: 'local',    // local handles ranking
+  draft: 'both',    // run both in parallel
+  voice: 'local',   // always local
+  chat: 'claude',   // chat with the user
+}
+```
+
+Adaptive routing (per-class win-rate) is Phase 3+.
+
+---
+
+## 8. Dashboard = typed tree view
+
+The dashboard package serves two roles: it's the desktop UI client, AND it's the typed-tree-view layer that policies all dashboard-side mutations against schema.
+
+### Schema registry
+
+A `TreeSchemaRegistry` is built at boot from each mounted ProcessDef's own schema declaration. The composite zod schema of the whole tree is the union.
+
+```typescript
+type TreeSchemaRegistry = {
+  pathPattern: string               // e.g., '/app/forums/*'
+  schema: ZodSchema                 // the shape of nodes at this path
+  allowedChildren?: ZodSchema[]     // what can be added as children
+  allowedActions: ('read' | 'edit' | 'add-child' | 'move' | 'remove')[]
+}[]
+```
+
+### Form renderer
+
+Schema-aware form generation. Six field kinds in v1:
+- string
+- number
+- boolean
+- enum (dropdown)
+- list of strings (tag editor)
+- ref-to-secret (one-way valve — set/update only, never display)
+
+Each plugin's `propsSchema` is mapped through the renderer to produce the instance-creation form.
+
+### Add/move/remove menus
+
+Right-click any tree node:
+- **Add child** — menu queries registry for "what schemas can be a child of this path?" Only valid candidates appear.
+- **Edit** — opens the form for the node's schema. Submit triggers a typed mutation.
+- **Move** — destination must satisfy the moved subtree's schema. Drag-drop UI prevents invalid drops.
+- **Remove** — confirmation modal; checks for downstream dependencies.
+
+### Standard reads via `usePath`
+
+For reads (subscriptions to tree state), the dashboard uses standard treenity client `usePath` hooks. No custom client primitive — leverage what samovar-client / treenity provide.
+
+### Where the type policing fits in the architecture
+
+```
+[user action in dashboard]
+        │
+        ▼
+[dashboard's typed-tree-view layer]
+  - looks up schema for target path
+  - validates new value against schema
+  - if invalid: reject in UI, never sends to server
+        │
+        ▼ (valid)
+[treenity-client websocket]
+        │
+        ▼
+[agent-server's mutation handler]
+  - re-validates (defense in depth)
+        │
+        ▼
+[/forum-agent/...] update
+```
+
+Two-layer validation: client-side (good UX, immediate feedback) + server-side (defense in depth against malicious or buggy clients).
+
+### Future: auto-form-generation samovar-side
+
+Currently we hand-write the form-rendering logic. When samovar lands the view-side type registry primitive (see `samovar_config_mount_handler_request.md` in memory), this could move into samovar; dashboards across the ecosystem benefit. For now, project-local.
+
+---
+
+## 9. Data model
+
+Each process owns its tree slice. The agent-server tree at boot is:
+
+```
+/                          (treenity root)
+├─ /config/                seeded from app.config.ts; live-editable from dashboard
+│  ├─ focus
+│  ├─ forums (list)
+│  ├─ policy
+│  ├─ models
+│  ├─ telegram
+│  └─ retraining
+│
+├─ /forum-agent/           parent forumManager ProcessDef
+│  ├─ /forum-agent/forums/                children-typed-as-ForumPlugin
+│  │  ├─ /reddit/         redditForum process instance
+│  │  │  ├─ store: { queue, lastPollAt, seen, errors, ... }
+│  │  │  └─ workers: { pollWorker, dedupeWorker, ... }
+│  │  ├─ /endless-sphere/ endlessSphereForum process instance
+│  │  └─ ...
+│  │
+│  ├─ /forum-agent/llm-bridge/    llmBridge ProcessDef
+│  │  ├─ store: { claudeStatus, localStatus, recentCalls, ... }
+│  │  └─ workers: { healthMonitor, ... }
+│  │
+│  ├─ /forum-agent/inbox/<id>     awaiting curation
+│  ├─ /forum-agent/training/<id>  LoRA preference pairs + finals
+│  ├─ /forum-agent/people/<handle>  person cards
+│  ├─ /forum-agent/instructions/claude/<topic>.md
+│  ├─ /forum-agent/permissions/   CSS-like selector ACL
+│  ├─ /forum-agent/tasks/<id>     work items
+│  └─ /forum-agent/chat/<session>/messages
+```
+
+### Each process slice is its own schema
+
+The composite tree schema is the union of every mounted process's local schema. The typed-tree-view in the dashboard knows the schema for `/forum-agent/forums/reddit/store/queue/<id>` because the redditForum ProcessDef declared it.
+
+### Permissions: hierarchical, CSS-like
 
 ```
 /permissions/
-  rules:
-    - selector: "/inbox/*"
-      role: "peer"
-      grant: [read]
-    - selector: "/inbox/<id>[review_mode=peer-review]"
-      role: "peer"
-      grant: [read, comment]
-    - selector: "/inbox/<id>[review_mode=gated]"
-      role: "author"
-      grant: [read, comment, edit, approve]
-    - selector: "/training/**"
-      role: "*"
-      grant: []                  ← private by default
-    - selector: "/people/<handle>"
-      role: "viewer"
-      grant: [read]
+  rules: [
+    { selector: '/forum-agent/inbox/*', role: 'peer', grant: ['read'] },
+    { selector: '/forum-agent/inbox/*[reviewMode=peer-review]', role: 'peer', grant: ['read', 'comment'] },
+    { selector: '/forum-agent/training/**', role: '*', grant: [] },  // private by default
+    ...
+  ]
+  peers: { '<telegramUserId>': { role: 'peer' | 'viewer' | 'guest' | 'author' } }
 ```
 
-### Roles
-
-| Role     | Capabilities                                                                 |
-|----------|------------------------------------------------------------------------------|
-| `guest`  | Default for anyone reaching your bot without being granted explicit role     |
-| `viewer` | Can see what you publish in shared topics; no comment privilege              |
-| `peer`   | Full team member — can comment on review-mode threads, see review queue      |
-| `author` | Can **modify** your draft text (highest trust). Removes AI-disclaimer when they edit (their words contributed) |
-
-Role assignments live at `/permissions/peers/<telegram_user_id>` → `{role, ...}`.
-
-### Per-thread overrides
-
-Any thread can set:
-- `review_mode`: `solo` (default) | `peer-review` | `gated`
-- `review_peers`: list of peer IDs whose feedback you want
-- `gate_peers`: list of peer IDs whose approval is required before post
-
-In `gated` mode, the inbox row's `status` stays `gated` until all `gate_peers` have approved (👍 reaction or `/approve` command in the topic). Then `status` → `ready-to-post`.
-
-### Private volume
-
-Each peer has a **private volume** under `/training/`, `/instructions/`, `/people/` notes, `/config/voice` — never exposed to peers, even with `author` role. Voice and KB are personal. Sharing must be explicit export.
-
-### Dashboard for permissions (v2)
-
-A webview panel: visual selector tree, drag-drop roles, preview "what can @alice see right now?" Inspired by CSS devtools but for ACL. Detailed design deferred to v2.
-
-### Expertise weights (v3)
-
-A scoring layer: peers gain weighted authority on specific topics over time, based on the success of their reviews/contributions. Voting on contested drafts uses these weights. **Requires 3+ peer interactions per data point** (echoes the QCD-tripod intuition from the earlier ForumModerator concept). Deferred to v3.
+Inheritance: child paths inherit parent permissions unless overridden locally. Same model as CSS specificity.
 
 ---
 
-## 8. Disclosure policy
+## 10. Telegram integration
 
-**Policy: `no-human-edit`** (locked).
+Each peer brings their own bot (registered with @BotFather). Multiple bots coexist in shared supergroups.
 
-```
-if user_final == claude_draft OR user_final == local_draft (zero edits):
-    append disclosure footer to post
-else:
-    no footer — the human contributed final language; it's a normal post
-```
+Forum-mode supergroup, topics auto-managed:
+- 📌 General — pinned dashboard
+- 📋 Task Board
+- 🔍 Review Queue
+- 💬 \<forum> #\<id> — per-forum-thread topics
+- 🤖 Bot Status — health/errors/retraining
 
-### Author edits remove disclosure
+Telegram bot rendering is reactive: it subscribes to tree changes, pushes message updates. Incoming actions (commands, reactions, replies) are dispatched to agent-server mutations.
 
-If a peer with `author` role edited the draft and the owner posts it, the post is still owner's responsibility — but it contains another human's final language, so the disclosure footer is removed.
-
-### Disclosure footer template
-
-```
----
-_This reply was drafted by an AI assistant and posted without my review. Reply to me directly or DM @<handle> for personal attention._
-```
-
-Configurable per peer at `/config/policy/disclosure_footer`.
-
-### Escalation trigger
-
-Any reply to a disclosed post containing the configured trigger phrase (default: `@<handle> human please`) → bot halts agent activity in that forum thread, pings owner in Telegram, owner takes over manually. The forum handle stays the same; only the brain switches from agent to human.
+Telegram NEVER stores anything authoritative. Tree is source-of-truth. Nuke the supergroup → bot rebuilds topics from tree on next start.
 
 ---
 
-## 9. Forum scraper plugins (generated, per-forum)
+## 11. Permission system
 
-Scrapers are **plugins**, one per forum (or per forum-type — e.g., one Discourse plugin can cover many Discourse-software instances with config). Each lives in its own package under `packages/forum-plugins/`.
+(Unchanged from morning version; recap.)
 
-**Scrapers are generated, not hand-written.** A scraper-generator tool (Claude-driven) takes "add coverage for forum X" and emits a new plugin package: inspects sample pages, detects whether the forum has a JSON API, fills in the declarative schema OR writes code-mode scraper for outliers, generates fixtures + tests.
+Hierarchical, CSS-like (selectors + grants). Roles: `guest`, `viewer`, `peer`, `author`. Per-thread `reviewMode`: `solo` | `peer-review` | `gated`. Each peer's `/training/`, `/instructions/`, `/people/` notes, voice config — private volume, never exposed.
 
-This makes the scraper layer effectively unbounded — adding a new forum is "run the generator, review the diff, commit." No hand-coding new forum integrations.
+Future: expertise-weighted voting (Phase 4) — requires ≥3-party interactions per data point.
 
-**Hybrid (c) strategy:** declarative schema is the default the generator targets; code escape hatch for forums that can't fit (Discord, complex SPAs).
-
-### Declarative scraper schema
-
-```ts
-type ScraperConfig = {
-  forum_id: string
-  kind: 'json-api' | 'html' | 'rss'
-  endpoint: string                    // URL template
-  list_selector?: string              // jq path or CSS selector
-  thread_fields: {
-    id: string
-    title: string
-    body: string
-    author: string
-    timestamp: string
-    url: string
-    replies?: string
-  }
-  pagination?: { type: 'cursor' | 'page', param: string }
-  auth?: { type: 'public' | 'oauth' | 'cookie', ... }
-  rate_limit: { rpm: number }
-}
-```
-
-Phase 1 covers Reddit (`json-api`, no auth needed — `.json` suffix on URLs).
-
-### Code escape hatch
-
-For forums that don't fit (Discord requires gateway+auth+heavy state; complex SPAs requiring headless browsers), drop a `scraper.ts` file in the plugin package. The plugin contract is just `{fetchSince(timestamp) → Thread[]}`.
-
-### Plugin layout
-
-```
-packages/
-├─ scraper-generator/         ← the meta-tool that emits scraper plugins
-│  ├─ module.md
-│  ├─ src/
-│  │  ├─ inspect-forum.ts    ← samples pages, detects JSON API, finds pagination
-│  │  ├─ fill-schema.ts      ← Claude fills declarative schema from samples
-│  │  ├─ emit-code-mode.ts   ← Claude writes scraper.ts for outliers
-│  │  └─ scaffold-package.ts ← writes the new plugin package to disk
-│  └─ templates/             ← package.json/module.md/test-fixture templates
-│
-└─ forum-plugins/             ← generated output lives here
-   ├─ reddit/                ← declarative (json-api kind)
-   │  ├─ package.json
-   │  ├─ module.md
-   │  ├─ scraper.config.ts
-   │  ├─ src/index.ts        ← thin MCP server wrapping the config
-   │  └─ test/fixtures/      ← captured sample pages, tests
-   ├─ endless-sphere/        ← declarative (html kind)
-   ├─ hackernews/            ← declarative (json-api kind)
-   ├─ discord/               ← code-mode (gateway, auth)
-   └─ ...
-```
-
-Each plugin is its own pnpm workspace package. Mirrors `samovar-target-plugins/` layout from spicetime-architecture (see `feedback_samovar_target_plugins_layout.md`).
-
-### Generator workflow
-
-```
-$ pnpm forum-plugins:gen <forum-url-or-name>
-       ↓
-generator inspects forum (sample pages, JSON probes, pagination)
-       ↓
-Claude proposes: schema-kind + selectors (or code-mode + scraper.ts)
-       ↓
-generator scaffolds packages/forum-plugins/<name>/
-  ├─ scraper.config.ts (or src/scraper.ts)
-  ├─ package.json
-  ├─ module.md
-  ├─ test/fixtures/ (sample pages captured)
-  └─ test/scraper.test.ts (asserts extraction shape)
-       ↓
-user reviews diff, edits if needed, commits
-       ↓
-plugin auto-registered with agent on next start
-```
-
-The generator IS the "layer above" the user described earlier — same shape as the broader agent-generator idea, scoped to scrapers. Other generators (e.g., "generate a focus profile from a prompt") can follow the same pattern in later phases.
+See [docs/user/team-collaboration.md](user/team-collaboration.md) for the user-facing description.
 
 ---
 
-## 10. Per-thread workflow lifecycle
+## 12. Disclosure policy
 
-A thread row in `/inbox/<id>` transitions through states:
+(Unchanged from morning; recap.)
 
-```
-   [scraped]
-       ↓ agent picks unranked
-   [drafting]                ← both models run in parallel
-       ↓ both complete
-   [awaiting-curation]       ← user sees in Telegram + dashboard
-       ↓ user edits + decides review mode
-   [solo]              [peer-review]              [gated]
-       ↓                   ↓                          ↓
-       │             [peers comment]            [peers approve]
-       │                   ↓                          ↓ all approvals
-       └────────────►  [ready-to-post]  ◄────────────┘
-                          ↓ user posts on forum
-                       [posted]
-                          ↓ optional: ongoing thread monitoring
-                       [archived]
+Policy: `no-human-edit`. If user_final has zero edits from chosen draft → footer applied. Author-role peer edits remove footer (their words contributed).
 
-   abandonment can happen at any state → [abandoned]
-```
+Escalation: forum reply containing the configured trigger phrase halts agent activity in that thread, pings owner.
 
-Each transition writes an oplog event, all transitions are queryable for reports.
+See [docs/user/disclosure-policy.md](user/disclosure-policy.md) for the user-facing contract.
 
 ---
 
-## 11. Tasking system
+## 13. Per-thread workflow lifecycle
 
-Every action that needs a human's attention is a **task** at `/tasks/<task_id>`. Tasks are first-class, publicly visible to team members, and surfaced in the Telegram Task Board topic + dashboard.
+State machine:
 
-```ts
+```
+[scraped] → [drafting] → [awaiting-curation]
+                              │
+                              ▼
+                  [solo | peer-review | gated]
+                              │ user actions / peer approvals
+                              ▼
+                       [ready-to-post]
+                              │ user posts manually
+                              ▼
+                          [posted]
+                              │
+                              ▼
+                         [archived]
+
+abandonment can happen at any state → [abandoned]
+```
+
+Every transition writes an oplog event. Queryable for reports.
+
+---
+
+## 14. Tasking system
+
+Tasks at `/forum-agent/tasks/<task_id>`:
+
+```typescript
 type Task = {
-  id: string
+  id: TaskId
   type: 'curate-draft' | 'peer-review' | 'gate-approve' | 'handle-escalation' | 'retrain-prompt'
   assignee: PeerId
-  thread_id?: string
+  threadId?: ThreadId
   status: 'open' | 'in-progress' | 'completed' | 'blocked'
-  created_at: timestamp
-  due_at?: timestamp
-  blocked_by?: string[]
+  ...
 }
 ```
 
-Workflows assign tasks automatically. Examples:
-- New thread drafted → `curate-draft` for owner
-- Thread set to `peer-review` → `peer-review` task for each peer in `review_peers`
-- Forum reply contains escalation trigger → `handle-escalation` for owner, blocks future agent activity in that thread
-
-Tasks are visible to all team members (subject to permissions). Reviewers can see who's blocked on what.
+Auto-assigned on state transitions. Surfaced in Telegram Task Board topic + dashboard Tasks view. Subject to permissions (peer-review tasks visible to assignees + other peers in shared topics).
 
 ---
 
-## 12. Local LLM details
+## 15. Config & secrets
 
-- **Base model**: Qwen 2.5 32B Instruct
-- **Quantization**: q4 or q5 (mlx-lm format) to fit in 32GB M1 unified memory. Inference speed is fine — drafting is not real-time.
-- **Runtime**: `mlx_lm.server` — long-running, listening on a unix socket. Node target connects via socket.
-- **LoRA**: applied at load time; multiple LoRAs supported (one per draft-mode, e.g., `voice-technical`, `voice-casual`).
-- **Retraining cadence**: weekly batch, runs overnight or on demand. mlx-examples LoRA fine-tuning handles it on Apple Silicon (~1–2h per run).
-- **Bootstrap**: day 1 has no LoRA. Local model is base-instruct. It will be visibly weaker than Claude. **This is expected** — user already acknowledges. Side-by-side comparison from day 1 is itself the data-collection mechanism for the eventual LoRA.
+### Two config files
+
+| File | Purpose | Edit-time | Live in tree? |
+|---|---|---|---|
+| `samovar.config.ts` | Build-time: targets, entries, vite config | rare | no |
+| `app.config.ts` | App-runtime: focus, voice, forums, policy, retraining | per-peer overlay via `app.config.local.ts` | yes (seeded at boot) |
+
+`app.config.ts` schema is zod-validated (see `app.config.ts` in repo root).
+
+### Boot sequence for config
+
+1. agent-server loads `app.config.ts` (or per-peer overlay `app.config.local.ts` if present).
+2. Validates against `AppConfigSchema`.
+3. Seeds `/config/` tree branch with the loaded values.
+4. After this, **tree is source of truth.** Dashboard mutations update `/config/` on tree; do NOT write back to the file. (See deferred section — future samovar config-mount-handler may live-sync.)
+
+### Secrets — never on tree
+
+| Lives in | Reachable from dashboard? | Synced to peers? |
+|---|---|---|
+| `.env` (Phase 1) or OS keychain (Phase 2) | One-way valve only (set/update; never read) | Never |
+
+Tree holds **references** like `auth_ref: 'claude.max'`, resolved at boot.
+
+Dashboard Settings panel: non-secrets are two-way bound; secrets show `✓ configured / ✗ not set` with a one-way `[Set] / [Update]` modal that writes to the secret store and never reads back.
+
+### Per-peer overlays
+
+```
+samovar.config.ts          ← workspace default, committed
+app.config.ts              ← workspace default, committed
+app.config.local.ts        ← per-peer overlay, gitignored
+.env                       ← per-peer secrets, gitignored
+```
+
+agent-server merges `app.config.ts` + `app.config.local.ts` (latter wins) at boot.
 
 ---
 
-## 13. The "agent-as-proxy" insight
+## 16. The agent-as-proxy insight
 
-A subtle but load-bearing concept the user articulated:
+From the user's design language:
 
 > "The agent is a proxy agent — he treats comms between team peers same as forum relationships."
 
-Meaning: from your agent's point of view, @alice (your teammate) and @some_user (a forum participant you're engaging with) are **the same kind of thing** — external entities with whom you have a relationship, mediated through your bot's API surface.
+From your agent's perspective, @alice (your teammate) and @some_user (a forum participant) are the same kind of entity — external entities you have relationships with, mediated through your bot's API surface.
 
-This collapses a lot of conceptual complexity:
-- The `/people/<handle>` cards work for both forum users AND team peers
+This collapses complexity:
+- `/people/<handle>` cards work for both forum users AND team peers
 - Permission rules apply uniformly
-- The agent's "engagement" logic doesn't need to branch on `is_team_member`
-- Future expertise-scoring works across the whole graph, not just one cohort
+- Engagement logic doesn't branch on `is_team_member`
+- Phase 4 expertise scoring works across the whole graph
 
-The only difference is the **transport** through which they reach you:
-- Forum participants reach you through scrapers (read-only from your side, write via your manual posts)
-- Team peers reach you through Telegram
+The only difference is transport:
+- Forum participants → reach you via scrapers (you post manually back)
+- Team peers → reach you via Telegram
 
-But to the agent, both are entities at `/people/<id>` with relationships, history, permissions.
-
----
-
-## 14. Config & secrets
-
-**Split-store rule:** non-secret config lives in the tree (DB), editable from the dashboard. Secrets live in OS keychain or gitignored `.env`, referenced from the tree by name only.
-
-|                          | Lives in                                          | Reachable from dashboard?                                | Synced to peers?                                       |
-|--------------------------|---------------------------------------------------|----------------------------------------------------------|--------------------------------------------------------|
-| **Non-secret config**    | `/config/` on the tree                            | Yes — live-editable as Settings panel                    | Optional Phase 5 (Hyperswarm), if owner opts in        |
-| **Secrets**              | OS keychain (preferred) OR gitignored `.env`      | **One-way valve**: set/update only, never read/displayed | **Never**. Per-peer, per-machine.                      |
-
-### Non-secret config (tree)
-
-Everything in `/config/` from §5 — focus prompt, voice samples, disclosure policy + footer template, escalation phrase, forum list, model names, retraining cadence, `autopost_classes`, etc. **All in the tree.**
-
-Why tree:
-- Live reactive — change voice template, agent picks it up on next call. No restart, no file watcher.
-- Dashboard Settings panel is just a view bound to `/config/` queries + mutations.
-- Oplog records every config change — auditable history of "when did I last edit the focus prompt?"
-- Permissions enforce owner-only by default (no peer reads your voice samples).
-
-### Secrets (not tree)
-
-What's a secret here:
-- Claude Code auth tokens (your Max session)
-- Telegram bot token (from @BotFather)
-- Forum auth cookies / OAuth tokens (if any plugin needs them)
-- Reddit / Hacker News / etc. API keys
-
-Why **not** tree:
-- Tree is queryable, oplog-recorded, backed up, may eventually p2p-sync (Phase 5). Putting secrets there means every backup / dev session / screenshot risks leaking them.
-- Tree-level encryption is fragile — easy to get wrong, hard to audit.
-
-Where they go, in order of preference:
-1. **macOS Keychain** via `keytar` or `@napi-rs/keyring` — encrypted at rest by OS, gated by user login.
-2. **`.env` or `secrets.local.toml`** (gitignored) — fine for v1 / dev, simpler to wire up first.
-
-The tree stores **references**, not values:
-```
-/config/models/claude/auth_ref:        "claude.max"
-/config/telegram/token_ref:            "telegram.bot_token"
-/config/forum-plugins/reddit/auth_ref: "reddit.app_token"
-```
-At agent-server load, a loader resolves each `*_ref` against keychain/env. Tree never sees the value.
-
-### Dashboard UX
-
-Settings panel has two visually distinct regions:
-
-**Non-secret** (two-way bound form):
-```
-[Focus prompt]         [..........................]
-[Disclosure footer]    [..........................]
-[Forum list]           [+ add]
-[Retraining cadence]   [weekly ▼]
-```
-
-**Secrets** (one-way valve, status only):
-```
-[Claude Code auth]      ✓ Configured  [Update] [Remove]
-[Telegram bot token]    ✗ Not set     [Set]
-[Reddit auth]           ✗ Not set     [Set]
-```
-Click `Set` / `Update` → modal with a single password-style input → writes to keychain → never readable through the dashboard again.
-
-### v1 → v2 migration
-
-- **Phase 1 (v1)**: secrets in gitignored `.env` at repo root. Tree refs by name. Setup is `cp .env.example .env && edit`. Done.
-- **Phase 2 (v2)**: migrate to OS keychain via keytar/keyring. Dashboard gains the one-way set/update UI. Migration tool copies from `.env` to keychain on first run, then warns about removing the file.
-
-### Peer-sovereign implications
-
-Each peer's secrets are **theirs alone, on their machine alone**. No way to accidentally share via tree replication, no way to leak via screenshot of dashboard. If a peer's laptop dies, they reconfigure secrets on the next install — they're not in any backup of the tree (correctly).
+But to the agent, both are entities with relationships, history, permissions.
 
 ---
 
-## 15. Open / deferred
+## 17. Open / deferred / samovar-side dependencies
 
-These are explicitly known unknowns. Not blockers for v1; flagged so they're not lost:
+Known unknowns. Not blockers for v1.
 
-- **Permission dashboard UX** — CSS-devtools-inspired ACL editor. Wireframe in v2.
-- **Expertise scoring** — weighted voting, 3-party interaction requirement, how scores accumulate. Full design in v3.
-- **Conflict resolution** between peer reviewers — voting weights, tie-breaking, overrule paths. v3.
-- **Group lifecycle automation** — exact triggers for create/close, invitation flow, status bar messaging cadence. Refined as v2 lands.
-- **Cross-peer training data export** — if @alice wants to share a slice of her training data with you (e.g., she's an expert on protocol decoding), what's the export format? v3.
-- **Tree-to-tree p2p sync** — when Hyperswarm `t.mount.remote` ships in samovar, this opens up direct tree-level peer access. Currently locked: Telegram-only fabric.
-- **Local model authority promotion algorithm** — per-class win rate threshold, A/B testing protocol for new LoRA versions. v2.
-- **Forum-posting identity** — currently user posts manually. Future option: agent has the credentials and posts on user's behalf with disclosure. Considered higher-risk; not v1.
+### Samovar-side features we depend on (recorded in memory; not blocking)
+
+- **Typed dynamic children API** — currently `ProcessDef.children` is static. We pre-declare children from `app.config.ts` at boot (acceptable for v1). When samovar lands typed-dynamic-children, hot add/remove without restart. See `samovar_typed_dynamic_children_request.md` in memory.
+- **Config-driven tree branch generation** — samovar could auto-gen `/config/` from `app.config.ts` shape via a config-mount-handler. v1 manually seeds. See `samovar_config_mount_handler_request.md` in memory.
+- **View-side type registry primitive** — currently we hand-roll the typed-tree-view in our dashboard. Samovar could provide a primitive that auto-generates forms from schemas, usable across vscode shell, figma, future apps. v1 project-local.
+
+### Internal deferred
+
+- Permission dashboard UX richer than v1's basic role assignment
+- Expertise scoring + 3-party interaction requirement (Phase 4)
+- Conflict resolution between peer reviewers (weighted voting, tie-breaking, overrule paths)
+- Group lifecycle automation refinements
+- Cross-peer training data export format
+- Tree-to-tree p2p sync via Hyperswarm (Phase 5)
+- Local model authority promotion algorithm (Phase 3)
+- Forum-posting identity / agent-posts-for-you (later, with disclosure)
 
 ---
 
-## 16. References
+## 18. References
 
-- Recovered from prior chats: `~/.claude/projects/-Users-dmitryshusterman-WebstormProjects/a642bb5e-6de8-488d-a126-e3af64aac604.jsonl` (May 5, lines 100–141) + `aa31212e-341a-4984-b7f4-3f90b16e73eb.jsonl` (May 11, lines 223–226)
-- Related memory: [project_ebike_strategy.md](../../../.claude/projects/-Users-dmitryshusterman-WebstormProjects/memory/project_ebike_strategy.md), [project_ebike_product_lineup_2026-05-11.md](../../../.claude/projects/-Users-dmitryshusterman-WebstormProjects/memory/project_ebike_product_lineup_2026-05-11.md)
-- Earlier (different) forum-related design: `myPublicSpicetime/packages/components/ForumModerator/` (the QCD-tripod "Constructive Engagement App" — different scope, but the 3-party expertise-scoring requirement here echoes its core intuition)
-- Samovar conventions: [spicetime-architecture/CLAUDE.md](../../../WebstormProjects/spicetime-architecture/CLAUDE.md), [packages/samovar/DESIGN.md](../../../WebstormProjects/spicetime-architecture/packages/samovar/DESIGN.md), [packages/samovar/roadmap.md](../../../WebstormProjects/spicetime-architecture/packages/samovar/roadmap.md)
+- User docs: [docs/index.md](index.md)
+- Roadmap: [docs/roadmap.md](roadmap.md)
+- Team review: [SPEC.md](../SPEC.md)
+- Per-package overviews: each `packages/<name>/<name>.abstract.md`
+- Per-package engineering: each `packages/<name>/module.md`
+- App config schema: [app.config.ts](../app.config.ts)
+- Build config: [samovar.config.ts](../samovar.config.ts)
+- Local CLAUDE.md (project-local conventions override): [CLAUDE.md](../CLAUDE.md)
+- Parent (samovar) conventions: `~/WebstormProjects/spicetime-architecture/CLAUDE.md`
+- Memory: `~/.claude/projects/-Users-dmitryshusterman-WebstormProjects/memory/design_forum_manager_agent_2026-05-16.md`
+- Samovar feature requests: `~/.claude/projects/.../memory/samovar_typed_dynamic_children_request.md`, `samovar_config_mount_handler_request.md`
+- Recovered original chat sources: `~/.claude/projects/.../{a642bb5e-...,aa31212e-...}.jsonl`
