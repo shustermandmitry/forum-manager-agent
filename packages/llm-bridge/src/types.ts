@@ -97,9 +97,20 @@ export interface LocalModelOpts {
   temperature?: number
 }
 
+/**
+ * Per-call-kind routing. Single dispatch only — for each call kind, exactly
+ * one client handles it.
+ *
+ * The dual-draft pattern (run claude.draft AND local.draft in parallel for
+ * the same thread) is NOT a router concern. The forumManager's
+ * draftScheduler worker calls both clients directly, by design — it's a
+ * higher-level orchestration than per-call routing.
+ *
+ * voice is 'local' only — Claude's voice() throws by design (see ClaudeCodeClient).
+ */
 export interface RouterConfig {
-  rank: 'claude' | 'local' | 'both'
-  draft: 'claude' | 'local' | 'both'
+  rank: 'claude' | 'local'
+  draft: 'claude' | 'local'
   voice: 'local'
   chat: 'claude' | 'local'
 }

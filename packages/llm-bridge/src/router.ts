@@ -1,55 +1,58 @@
 /**
  * @module llm-bridge/router
  *
- * @abstract Per-call routing between Claude and local clients. v1 is static
- * config-based dispatch; adaptive routing (per-class win-rates) is Phase 3+.
+ * Per-call routing between Claude and local clients. v1 is strict
+ * single-dispatch: for each call kind, the configured client handles it
+ * — no fallback, no parallelism.
  *
- * @moduleType utility
+ * The dual-draft pattern (run both clients on the same thread, get two
+ * drafts side-by-side) is NOT routed through here — that's the
+ * forumManager.draftScheduler worker calling both clients directly.
+ *
+ * Adaptive routing (per-thread-class win-rates, dynamic switching) is
+ * Phase 3+. Until then, RouterConfig is read once at construction.
  */
 
 import type {
-  LLMClient,
-  RouterConfig,
-  RankArgs,
-  RankResult,
-  DraftArgs,
-  DraftResult,
-  VoiceArgs,
-  VoiceResult,
   ChatArgs,
   ChatResult,
+  DraftArgs,
+  DraftResult,
+  LLMClient,
+  RankArgs,
+  RankResult,
+  RouterConfig,
+  VoiceArgs,
+  VoiceResult,
 } from './types.ts'
 
 /**
- * @abstract Create a routing LLMClient that dispatches calls to Claude
- * and/or local based on config.
+ * Create a routing LLMClient.
  *
- * @param opts.claude - the Claude-backed client
- * @param opts.local - the local-model-backed client
- * @param opts.config - which client handles which call kind
- * @returns an LLMClient that internally routes
+ * @param opts.claude - Claude-backed client
+ * @param opts.local - local-model-backed client
+ * @param opts.config - per-call-kind routing
+ * @returns an LLMClient that internally dispatches per config
  *
  * @behaviour
- * - For `draft` with config 'both' — runs both clients in parallel; returns
- *   both results merged (caller deals with the array).
- * - For other modes — single client dispatch.
- * - `voice` always routes to local (config.voice is typed `'local'`).
- * - If the chosen client throws, the router does NOT fall back to the other.
- *   Caller handles errors explicitly.
+ * - rank/draft/chat → dispatch to `opts.config[kind]`'s client.
+ * - voice → always to local (config.voice is typed `'local'`).
+ * - Errors from the chosen client are NOT swallowed or fallen back —
+ *   caller handles. (Fallback policy is a higher-level concern; making
+ *   it implicit here would hide failures.)
  */
-export function createLLMRouter(_opts: {
+export function createLLMRouter(opts: {
   claude: LLMClient
   local: LLMClient
   config: RouterConfig
 }): LLMClient {
-  const notImplemented = (m: string) => {
-    throw new Error(`Not implemented: LLMRouter.${m}`)
-  }
+  const { claude, local, config } = opts
+  const pick = (kind: 'claude' | 'local'): LLMClient => (kind === 'claude' ? claude : local)
 
   return {
-    rank: async (_args: RankArgs): Promise<RankResult> => notImplemented('rank'),
-    draft: async (_args: DraftArgs): Promise<DraftResult> => notImplemented('draft'),
-    voice: async (_args: VoiceArgs): Promise<VoiceResult> => notImplemented('voice'),
-    chat: async (_args: ChatArgs): Promise<ChatResult> => notImplemented('chat'),
+    rank: (args: RankArgs): Promise<RankResult> => pick(config.rank).rank(args),
+    draft: (args: DraftArgs): Promise<DraftResult> => pick(config.draft).draft(args),
+    voice: (args: VoiceArgs): Promise<VoiceResult> => local.voice(args),
+    chat: (args: ChatArgs): Promise<ChatResult> => pick(config.chat).chat(args),
   }
 }
