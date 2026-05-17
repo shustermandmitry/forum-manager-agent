@@ -101,15 +101,13 @@ Reasons:
 - Adding/removing forums = adding/removing children. Aligns with the (future) typed-dynamic-children API.
 - Reactive subscriptions across processes are samovar's native model; trying to drive everything inside one process means worker logic gets stringy and hard to test.
 
-### Build target stress test
+### Build targets
 
-Two node targets exist for the same code, to exercise samovar's binding system:
-- `node-napi` — native-NAPI binding (no actual Rust crate in this app; binding mechanism is what's being tested)
-- `node-ts` — plain TypeScript binding (no codegen)
+agent-server builds for Node (always-on background process). Dashboard builds for browser (Solid + Vite).
 
-Both should produce identically-behaving builds. CI runs both; behavioral parity tests prove they agree.
+We want to exercise both samovar binding pathways for the Node target — the napi one (compiled native) and the plain-TS one (no codegen) — as a stress test of samovar's binding system, even though this app has no Rust crate of its own.
 
-The `browser` target is for the dashboard.
+The exact `samovar.config.ts` shape per-package is filled when build wiring lands in Phase 1. Each package has its own config alongside its `package.json`; the workspace-root config is a minimal stub. Reference samovar conventions: `spicetime-architecture/packages/samovar-test/sample-app/samovar.config.ts` and `packages/sam-integration-app/samovar.config.ts`.
 
 ### Subprocess bridges (unix sockets)
 

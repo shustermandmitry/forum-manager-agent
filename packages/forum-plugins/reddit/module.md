@@ -53,14 +53,28 @@ Easily extensible — just add to config.
 ```
 forum-plugins/reddit/
 ├─ module.md
+├─ reddit.abstract.md          ← user-facing module overview
 ├─ package.json
-├─ scraper.config.ts           ← declarative config
+├─ scraper.config.ts           ← declarative config used by createRedditForumProcess
 └─ src/
-   ├─ index.ts                 ← thin export
-   ├─ reddit.abstract.ts       ← types
-   └─ reddit.ts                ← implementation skeleton
+   ├─ index.ts                 ← plugin contract exports (domain, packageName, propsSchema, factory)
+   ├─ types.ts                 ← RedditScraperOpts, RedditForumStore, ForumPluginExports
+   └─ reddit.ts                ← createRedditForumProcess factory (returns ProcessDef)
 └─ test/
    ├─ fixtures/                ← captured sample pages (empty in scaffold)
    │  └─ .gitkeep
    └─ reddit.test.ts           ← extraction shape tests (to be written)
 ```
+
+## Plugin contract
+
+The package exports the four-field plugin metadata:
+
+```typescript
+export const domain = 'ForumPlugin'
+export const packageName = '@forum-manager-agent/forum-plugins-reddit'
+export const propsSchema    // zod schema for RedditScraperOpts
+export const factory        // (props) => ProcessDef (the createRedditForumProcess factory)
+```
+
+agent-server's `pluginRegistry.loadAndRegisterPlugin()` reads these four exports, validates each forum config's `props` against `propsSchema`, then calls `factory(props)` to get a ProcessDef to mount at `/forum-agent/forums/reddit/`.

@@ -88,3 +88,35 @@ export interface RouterConfig {
   voice: 'local'
   chat: 'claude' | 'local'
 }
+
+// ─── ProcessDef shape ───────────────────────────────────────────────────────
+
+/**
+ * Options consumed by createLLMBridgeProcess.
+ */
+export interface LLMBridgeProcessOpts {
+  claude: ClaudeCodeOpts
+  local: LocalModelOpts
+  routing: RouterConfig
+}
+
+/**
+ * The llmBridge process store. Operational state only — no LLM outputs are
+ * stored here (those flow into forumManager's inbox).
+ */
+export interface LLMBridgeStore {
+  claudeStatus: 'idle' | 'busy' | 'error' | 'rate-limited'
+  localStatus: 'idle' | 'busy' | 'error' | 'disconnected'
+  recentCalls: LLMCallRecord[]
+  lastClaudeCallAt: number
+  lastLocalCallAt: number
+}
+
+export interface LLMCallRecord {
+  at: number
+  via: 'claude' | 'local'
+  kind: 'rank' | 'draft' | 'voice' | 'chat'
+  durationMs: number
+  ok: boolean
+  error?: string
+}

@@ -1,44 +1,18 @@
 /**
  * @module forum-manager-agent/samovar.config
  *
- * @abstract Workspace-level samovar build config. Declares the three targets the
- * monorepo emits: two node bindings (for stress-testing both) and the browser
- * dashboard.
+ * Workspace-level samovar config. Currently empty — per-package
+ * samovar.config.ts files (alongside each package's package.json) carry
+ * the real shape, filled in when build wiring lands in Phase 1.
  *
- * Each entry resolves to a sub-package's own samovar.config.ts via `entry`.
- * Per-package configs declare their own crateName + entry; this file just
- * orchestrates which targets compile which entries.
+ * `crateName` removed 2026-05-16 — internal wiring leaking into user-facing
+ * config. samovar-cli's `defineConfig` type needs to drop the field; see
+ * samovar_cli_drop_crateName_request.md in memory.
  *
- * Filled with stubs intentionally — exact factory shapes get nailed down in
- * Phase 1 when samovar conventions are integrated. See ../docs/design.md §3
- * for the target-binding strategy.
+ * Going forward: any samovar-shape decisions in this repo are grounded in
+ * samovar-cli source code, not docs. Docs lie / go stale.
  */
 
 import { defineConfig } from '@shustermandmitry/samovar/packageProcess'
 
-export default defineConfig({
-  crateName: 'forum-manager-agent',
-
-  // Three targets — node-napi + node-ts are the binding stress-test; browser is the dashboard.
-  // Each target's entry is the sub-package's own samovar.config.ts.
-  targets: [
-    {
-      name: 'node-napi',
-      binding: 'napi',
-      family: 'node',
-      entries: ['packages/agent-server'],
-    },
-    {
-      name: 'node-ts',
-      binding: 'ts',
-      family: 'node',
-      entries: ['packages/agent-server'],
-    },
-    {
-      name: 'browser',
-      binding: 'esm',
-      family: 'browser',
-      entries: ['packages/dashboard'],
-    },
-  ],
-} as any)
+export default defineConfig({} as any)

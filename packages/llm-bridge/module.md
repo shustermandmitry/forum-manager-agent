@@ -74,11 +74,18 @@ createLLMRouter(opts: { claude, local, config }): LLMClient
 ```
 llm-bridge/
 ├─ module.md
+├─ llm-bridge.abstract.md     ← user-facing module overview
 ├─ package.json
 └─ src/
    ├─ index.ts                ← barrel
-   ├─ llmBridge.abstract.ts   ← LLMClient interface + types
-   ├─ claudeCode.ts           ← Claude Code subprocess driver
-   ├─ localModel.ts           ← mlx-lm socket client
-   └─ router.ts               ← per-call routing
+   ├─ types.ts                ← LLMClient interface + ProcessDef store/opts types
+   ├─ claudeCode.ts           ← Claude Code subprocess driver (library)
+   ├─ localModel.ts           ← mlx-lm socket client (library)
+   ├─ router.ts               ← per-call routing (library)
+   └─ llmBridgeProcess.ts     ← ProcessDef wrapper (mounted by agent-server)
 ```
+
+## Two consumer modes
+
+- **Library**: tests import `createClaudeCodeClient`/`createLocalModelClient`/`createLLMRouter` directly for unit testing the subprocess drivers.
+- **ProcessDef**: agent-server mounts `createLLMBridgeProcess(opts)` at `/forum-agent/llm-bridge/` for in-app use. Other processes call it through the standard samovar mutation/query protocol.

@@ -16,5 +16,8 @@
     "build": "echo 'Not implemented'",
     "test": "echo 'Not implemented'",
     "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@shustermandmitry/samovar": "workspace:*"
   }
 }

@@ -48,21 +48,24 @@ This is one of two windows into the tree (Telegram is the other). The dashboard 
 ```
 dashboard/
 ├─ module.md
+├─ dashboard.abstract.md       ← user-facing module overview
 ├─ package.json
 ├─ index.html                  ← Vite entry
 ├─ vite.config.ts
 └─ src/
    ├─ index.ts                 ← barrel
-   ├─ dashboard.abstract.ts    ← types
+   ├─ types.ts                 ← DashboardOpts, FieldKind, NodeSchemaEntry, ...
    ├─ app.tsx                  ← root component
    ├─ treeClient.ts            ← websocket client + reactive subscriptions
-   ├─ views/
-   │  ├─ inbox.tsx
-   │  ├─ queue.tsx
-   │  ├─ tasks.tsx
-   │  ├─ people.tsx
-   │  ├─ permissions.tsx
-   │  └─ settings.tsx
+   ├─ schemaRegistry.ts        ← TreeSchemaRegistry (typed-tree-view core)
+   ├─ formRenderer.tsx         ← SchemaForm — generic schema-to-form
+   ├─ treeNavigator.tsx        ← TreeNavigator — schema-aware add/move/remove
+   ├─ views/                   ← per-view components (TBD when filling stubs)
+   │  ├─ inbox.tsx, queue.tsx, tasks.tsx, people.tsx, permissions.tsx, settings.tsx
    └─ components/
       └─ draftDiff.tsx         ← Claude vs local side-by-side render
 ```
+
+## Typed tree view (this is the headline primitive)
+
+The `schemaRegistry` + `formRenderer` + `treeNavigator` trio is what makes the dashboard schema-aware. Every add/move/edit goes through the registry. Forms are auto-generated from zod schemas. The Settings view is a `TreeNavigator` rooted at `/config/`; the rest of the views are specialized layouts over the same primitives.

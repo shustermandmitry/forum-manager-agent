@@ -11,9 +11,13 @@
     "type-check": "pnpm --recursive --filter './packages/*' run type-check"
   },
   "packageManager": "pnpm@9.0.0",
+  "dependencies": {
+    "zod": "^3.23.0"
+  },
   "pnpm": {
     "peerDependencyRules": {
       "ignoreMissing": [
+        "@shustermandmitry/samovar",
         "@samovar/process-runtime",
         "@treenity/core",
         "@treenity/react"

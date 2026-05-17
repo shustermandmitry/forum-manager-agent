@@ -4,6 +4,8 @@
  * Public types for the agent-server package.
  */
 
+import type { ZodSchema } from 'zod'
+
 export type ThreadId = string
 export type PeerId = string
 export type ForumHandle = string
@@ -37,7 +39,7 @@ export interface AgentServer {
   stop(): Promise<void>
 }
 
-// ─── Forum agent store types ──────────────────────────────────────────────
+// ─── Config (mirrors app.config.ts; resolved + validated at boot) ──────────
 
 export interface AgentConfig {
   focus: {
@@ -71,18 +73,65 @@ export interface ForumConfig {
   pluginName: string
   enabled: boolean
   pollIntervalMinutes: number
+  props: Record<string, unknown>  // plugin-specific; validated against plugin's propsSchema
 }
 
-export interface QueueEntry {
-  threadId: ThreadId
-  forumId: string
-  scrapedAt: number
-  context: string
-  url: string
+// ─── Plugin contract (consumed by PluginRegistry) ──────────────────────────
+
+/**
+ * Plugin domains we know about. Open string — new domains added in future.
+ */
+export type PluginDomain = 'ForumPlugin' | 'LLMPlugin' | (string & {})
+
+/**
+ * What every plugin package's main module must export.
+ *
+ * Plugin packages have an index that exports:
+ *   - factory: (props) => ProcessDef
+ *   - propsSchema: ZodSchema
+ *   - domain: PluginDomain
+ *   - packageName: string
+ */
+export interface PluginMetadata {
+  domain: PluginDomain
+  packageName: string
+  propsSchema: ZodSchema
+  /** Returns a ProcessDef ready to mount under the appropriate slot. */
+  factory: (props: unknown) => unknown
 }
+
+export interface PluginRegistry {
+  register(metadata: PluginMetadata): void
+  list(domain?: PluginDomain): PluginMetadata[]
+  get(packageName: string): PluginMetadata | undefined
+}
+
+// ─── forumManager store (the parent process state) ─────────────────────────
+
+/**
+ * The store shape for the forumManager ProcessDef. Coordination state only —
+ * per-forum operational state lives inside each forum's own child process.
+ *
+ * `forums` and `llmBridge` are NOT in this store — they are mount points for
+ * children, materialized at boot from config.
+ */
+export interface ForumManagerStore {
+  config: AgentConfig | null
+  status: AgentStatus
+  inbox: Record<ThreadId, InboxEntry>
+  training: Record<ThreadId, TrainingEntry>
+  people: Record<ForumHandle, PersonCard>
+  instructions: { claude: Record<string, string> }
+  permissions: PermissionRules
+  tasks: Record<TaskId, Task>
+  chat: Record<SessionId, ChatSession>
+}
+
+// ─── Per-thread record types (live on forumManager store) ─────────────────
 
 export interface InboxEntry {
   threadId: ThreadId
+  forumId: string
   context: string
   claudeDraft?: string
   localDraft?: string
@@ -96,14 +145,9 @@ export interface InboxEntry {
   peerComments?: { peerId: PeerId; text: string; at: number }[]
 }
 
-export interface SeenEntry {
-  threadId: ThreadId
-  firstSeenAt: number
-  lastTouchedAt: number
-}
-
 export interface TrainingEntry {
   threadId: ThreadId
+  forumId: string
   context: string
   claudeRaw: string
   localVoiced: string
@@ -163,4 +207,19 @@ export interface AgentStatus {
   llmsReady: boolean
   telegramConnected: boolean
   lastError?: { at: number; message: string }
+}
+
+// ─── Common types used across child processes ──────────────────────────────
+
+/**
+ * Common queue entry shape that all forum processes write into their own
+ * /queue store slice. Plugin-specific metadata goes under `meta`.
+ */
+export interface QueueEntry {
+  threadId: ThreadId
+  forumId: string
+  scrapedAt: number
+  context: string
+  url: string
+  meta?: Record<string, unknown>
 }

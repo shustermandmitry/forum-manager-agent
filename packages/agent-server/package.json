@@ -17,5 +17,9 @@
     "dev": "echo 'Not implemented'",
     "test": "echo 'Not implemented'",
     "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.23.0",
+    "@shustermandmitry/samovar": "workspace:*"
   }
 }

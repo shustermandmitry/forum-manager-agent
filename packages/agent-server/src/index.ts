@@ -1,5 +1,7 @@
 export { bootAgentServer } from './bootAgentServer.ts'
-export { forumAgent } from './forumAgent.ts'
+export { createForumManager } from './forumManager.ts'
+export { createPluginRegistry, loadAndRegisterPlugin } from './pluginRegistry.ts'
+
 export type {
   BootOptions,
   AgentServer,
@@ -14,9 +16,9 @@ export type {
   DisclosurePolicy,
   AgentConfig,
   ForumConfig,
+  ForumManagerStore,
   QueueEntry,
   InboxEntry,
-  SeenEntry,
   TrainingEntry,
   PersonCard,
   PermissionRules,
@@ -25,4 +27,7 @@ export type {
   ChatSession,
   ChatMessage,
   AgentStatus,
+  PluginRegistry,
+  PluginMetadata,
+  PluginDomain,
 } from './types.ts'

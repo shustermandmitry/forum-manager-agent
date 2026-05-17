@@ -81,12 +81,13 @@ See [../docs/design.md §5](../../docs/design.md) for the full data model.
 
 ```
 agent-server/
-├─ module.md                 ← this file
+├─ module.md                  ← this file
+├─ agent-server.abstract.md   ← user-facing module overview
 ├─ package.json
 └─ src/
-   ├─ index.ts               ← barrel
-   ├─ bootAgentServer.ts     ← boot fn
-   ├─ forumAgent.abstract.ts ← ProcessDef spec
-   ├─ forumAgent.ts          ← ProcessDef impl
-   └─ types.ts               ← BootOptions, AgentServer, etc.
+   ├─ index.ts                ← barrel
+   ├─ bootAgentServer.ts      ← boot fn
+   ├─ forumManager.ts         ← parent ProcessDef (was monolithic forumAgent; restructured 2026-05-16 evening)
+   ├─ pluginRegistry.ts       ← plugin registry + loader
+   └─ types.ts                ← all public types (BootOptions, AgentConfig, ForumManagerStore, PluginMetadata, ...)
 ```
