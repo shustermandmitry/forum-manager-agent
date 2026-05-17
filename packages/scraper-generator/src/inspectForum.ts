@@ -106,7 +106,7 @@ export async function inspectForum(
   }
 
   // ─── Pagination detection ─────────────────────────────────────────────────
-  const pagination = detectPagination($, normalizedUrl)
+  const pagination = detectPagination($)
 
   // ─── robots.txt ───────────────────────────────────────────────────────────
   const robotsTxt = await fetchRobotsTxt(normalizedUrl, { userAgent, timeoutMs })
@@ -246,10 +246,7 @@ function pickThreadLinks($: cheerio.CheerioAPI, baseUrl: string, limit: number):
   return Array.from(candidates).slice(0, limit)
 }
 
-function detectPagination(
-  $: cheerio.CheerioAPI,
-  baseUrl: string,
-): InspectionReport['pagination'] {
+function detectPagination($: cheerio.CheerioAPI): InspectionReport['pagination'] {
   for (const el of $('a[href]').toArray()) {
     const href = $(el).attr('href') ?? ''
     const match =
