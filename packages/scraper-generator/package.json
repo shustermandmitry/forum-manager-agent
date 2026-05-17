@@ -17,7 +17,12 @@
   },
   "scripts": {
     "build": "echo 'Not implemented'",
-    "test": "echo 'Not implemented'",
+    "test": "echo 'pending samovar-test wiring'",
     "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@shustermandmitry/samovar": "workspace:*",
+    "@forum-manager-agent/llm-bridge": "workspace:*",
+    "cheerio": "^1.0.0"
   }
 }

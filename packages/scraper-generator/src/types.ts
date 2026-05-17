@@ -17,10 +17,16 @@ export interface InspectionReport {
 }
 
 export interface SamplePage {
+  /** Original URL fetched. */
   url: string
+  /** When we fetched it (ms since epoch). */
   capturedAt: number
+  /** MIME type from Content-Type header. */
   contentType: string
+  /** Suggested filename for the generated plugin's test/fixtures/ folder. */
   fixturePath: string
+  /** Raw response body. Scaffold writes this to disk. */
+  content: string
 }
 
 export interface GenerateOpts {
