@@ -8,6 +8,9 @@ export const packageName = '@forum-manager-agent/forum-plugins-reddit'
 export { createRedditForumProcess, createRedditScraper } from './reddit.ts'
 export { redditScraperConfig } from '../scraper.config.ts'
 
+// HTTP-fetching primitives (pure, samovar-free).
+export { fetchSubreddit, fetchThreadComments, createRateLimitGate, RedditFetchError } from './reddit.ts'
+
 export type {
   RedditScraperOpts,
   RedditForumStore,
