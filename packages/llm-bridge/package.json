@@ -14,10 +14,11 @@
   },
   "scripts": {
     "build": "echo 'Not implemented'",
-    "test": "echo 'Not implemented'",
+    "test": "echo 'pending samovar-test wiring'",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@shustermandmitry/samovar": "workspace:*"
+    "@shustermandmitry/samovar": "workspace:*",
+    "execa": "^9.5.1"
   }
 }
