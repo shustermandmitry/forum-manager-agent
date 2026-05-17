@@ -5,10 +5,11 @@
   "type": "module",
   "description": "Always-on server: hosts treenity instance + forumAgent ProcessDef + websocket endpoint. The brain of one peer's installation.",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
       "import": "./dist/index.js"
     }
   },
@@ -20,6 +21,6 @@
   },
   "dependencies": {
     "zod": "^3.23.0",
-    "@shustermandmitry/samovar": "workspace:*"
+    "@shustermandmitry/samovar": "*"
   }
 }

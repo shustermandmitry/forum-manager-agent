@@ -5,10 +5,11 @@
   "type": "module",
   "description": "LLM subprocess bridges: Claude Code (per-call headless) + local Qwen via mlx-lm socket. Single LLMClient interface, two implementations.",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
       "import": "./dist/index.js"
     }
   },
@@ -18,7 +19,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@shustermandmitry/samovar": "workspace:*",
+    "@shustermandmitry/samovar": "*",
     "execa": "^9.5.1"
   }
 }

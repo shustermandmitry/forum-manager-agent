@@ -5,10 +5,11 @@
   "type": "module",
   "description": "Reddit scraper plugin — declarative kind (json-api). Bootstrap output of scraper-generator; first forum supported in Phase 1.",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
       "import": "./dist/index.js"
     }
   },
@@ -19,6 +20,6 @@
   },
   "dependencies": {
     "zod": "^3.23.0",
-    "@shustermandmitry/samovar": "workspace:*"
+    "@shustermandmitry/samovar": "*"
   }
 }

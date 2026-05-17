@@ -5,10 +5,11 @@
   "type": "module",
   "description": "Telegram bot binding for the agent. Per-peer (each peer brings their own bot). Renders tree state to topic messages; turns reactions/replies into mutations.",
   "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "types": "src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
       "import": "./dist/index.js"
     }
   },
